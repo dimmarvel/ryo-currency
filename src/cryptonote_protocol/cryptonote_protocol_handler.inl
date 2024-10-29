@@ -1243,7 +1243,7 @@ bool t_cryptonote_protocol_handler<t_core>::should_download_next_span(cryptonote
 		const long dt = (now - request_time).total_microseconds();
 		if (dt >= REQUEST_NEXT_SCHEDULED_SPAN_THRESHOLD)
 		{
-			//MDEBUG(context << " we should download it as it's not been received yet after " << dt/1e6);
+			GULPS_LOG_L1(context_str, " we should download it as it's not been received yet after ", dt/1e6);
 			return true;
 		}
 
@@ -1260,7 +1260,8 @@ bool t_cryptonote_protocol_handler<t_core>::should_download_next_span(cryptonote
 				const bool stalled = last_activity > LAST_ACTIVITY_STALL_THRESHOLD;
 				if (stalled)
 				{
-					//MDEBUG(context << " we should download it as the downloading peer is stalling for " << nowt - ctx.m_last_recv << " seconds");
+					GULPS_LOG_L1(context_str, " we should download it as the downloading peer is stalling for ",
+						nowt - ctx.m_last_recv, " seconds");
 					download = true;
 					return true;
 				}
@@ -1280,8 +1281,10 @@ bool t_cryptonote_protocol_handler<t_core>::should_download_next_span(cryptonote
 				}
 				if (dl_speed * .8f > ctx.m_current_speed_down * multiplier)
 				{
-					//MDEBUG(context << " we should download it as we are substantially faster (" << dl_speed << " vs "
-					//	<< ctx.m_current_speed_down << ", multiplier " << multiplier << " after " << dt/1e6 << " seconds)");
+					GULPS_LOG_L1(context_str, " we should download it as we are substantially faster (",
+						dl_speed, " vs ", ctx.m_current_speed_down, ", multiplier ", multiplier, " after ", 
+						dt/1e6, " seconds)");
+
 					download = true;
 					return true;
 				}
@@ -1293,7 +1296,7 @@ bool t_cryptonote_protocol_handler<t_core>::should_download_next_span(cryptonote
 			}
 			else
 			{
-				//MWARNING(context << " we should download it as the downloading peer is unexpectedly not known to us");
+				GULPS_LOG_L1(context_str, " we should download it as the downloading peer is unexpectedly not known to us");
 				return true;
 			}
 		}
