@@ -306,19 +306,34 @@ bool block_queue::get_next_span(uint64_t &height, std::list<cryptonote::block_co
 	return false;
 }
 
-bool block_queue::has_next_span(const boost::uuids::uuid &connection_id, bool &filled) const
+bool block_queue::has_next_span(const boost::uuids::uuid &connection_id, bool &filled, boost::posix_time::ptime &time) const
+{
+  boost::unique_lock<boost::recursive_mutex> lock(mutex);
+	if (blocks.empty())
+		return false;
+	block_map::const_iterator i = blocks.begin();
+	if (i == blocks.end())
+		return false;
+	if (i->connection_id != connection_id)
+		return false;
+	filled = !i->blocks.empty();
+	time = i->time;
+	return true;
+}
+
+bool block_queue::has_next_span(uint64_t height, bool &filled, boost::posix_time::ptime &time, boost::uuids::uuid &connection_id) const
 {
 	boost::unique_lock<boost::recursive_mutex> lock(mutex);
 	if(blocks.empty())
 		return false;
 	block_map::const_iterator i = blocks.begin();
-	if(is_blockchain_placeholder(*i))
-		++i;
 	if(i == blocks.end())
 		return false;
-	if(i->connection_id != connection_id)
+	if(i->start_block_height > height)
 		return false;
 	filled = !i->blocks.empty();
+	time = i->time;
+	connection_id = i->connection_id;
 	return true;
 }
 

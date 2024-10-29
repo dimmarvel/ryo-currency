@@ -150,10 +150,11 @@ class t_cryptonote_protocol_handler : public i_cryptonote_protocol, cryptonote_p
 	bool request_missing_objects(cryptonote_connection_context &context, bool check_having_blocks, bool force_next_span = false);
 	size_t get_synchronizing_connections_count();
 	bool on_connection_synchronized();
-	bool should_download_next_span(cryptonote_connection_context &context) const;
+	bool should_download_next_span(cryptonote_connection_context &context, bool standby) const;
 	void drop_connection(cryptonote_connection_context &context, bool add_fail, bool flush_all_spans);
 	bool kick_idle_peers();
 	int try_add_next_blocks(cryptonote_connection_context &context);
+    size_t skip_unneeded_hashes(cryptonote_connection_context& context, bool check_block_queue) const;
 
 	t_core &m_core;
 
