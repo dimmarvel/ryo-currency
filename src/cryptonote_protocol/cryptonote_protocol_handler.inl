@@ -75,7 +75,7 @@
 #define IDLE_PEER_KICK_TIME (600 * 1000000)					// microseconds
 #define PASSIVE_PEER_KICK_TIME (60 * 1000000)				// microseconds
 #define REQUEST_NEXT_SCHEDULED_SPAN_THRESHOLD_STANDBY (5 * 1000000) // microseconds
-#define LAST_ACTIVITY_STALL_THRESHOLD (2.0f) 				// seconds
+#define LAST_ACTIVITY_STALL_THRESHOLD (2.0f)				// seconds
 
 namespace cryptonote
 {
@@ -1101,11 +1101,11 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 					if(bvc.m_marked_as_orphaned)
 					{
 						if(!m_p2p->for_connection(span_connection_id, [&](cryptonote_connection_context &context, nodetool::peerid_type peer_id, uint32_t f) -> bool {
-							   GULPS_INFO( context_str, " Block received at sync phase was marked as orphaned, dropping connection");
-							   drop_connection(context, true, true);
-							   return 1;
-						   }))
-							GULPS_ERROR( context_str, " span connection id not found");
+								GULPS_INFO( context_str, " Block received at sync phase was marked as orphaned, dropping connection");
+								drop_connection(context, true, true);
+								return 1;
+						}))
+						GULPS_ERROR( context_str, " span connection id not found");
 
 						if(!m_core.cleanup_handle_incoming_blocks())
 						{
@@ -1225,23 +1225,23 @@ bool t_cryptonote_protocol_handler<t_core>::should_download_next_span(cryptonote
 	boost::uuids::uuid span_connection_id;
 	boost::posix_time::ptime request_time;
 	std::pair<uint64_t, uint64_t> span;
-    boost::uuids::uuid connection_id;
+	boost::uuids::uuid connection_id;
 	bool filled;
 
-    const uint64_t blockchain_height = m_core.get_current_blockchain_height();
-    if (context.m_remote_blockchain_height <= blockchain_height)
-      return false;
+	const uint64_t blockchain_height = m_core.get_current_blockchain_height();
+	if(context.m_remote_blockchain_height <= blockchain_height)
+		return false;
 
-    const boost::posix_time::ptime now = boost::posix_time::microsec_clock::universal_time();
-	if (!m_block_queue.has_next_span(blockchain_height, filled, request_time, connection_id))
+	const boost::posix_time::ptime now = boost::posix_time::microsec_clock::universal_time();
+	if(!m_block_queue.has_next_span(blockchain_height, filled, request_time, connection_id))
 	{
 		GULPS_LOG_L1(context_str, " we should download it as no peer reserved it");
 		return true;
 	}
-	if (!filled)
+	if(!filled)
 	{
 		const long dt = (now - request_time).total_microseconds();
-		if (dt >= REQUEST_NEXT_SCHEDULED_SPAN_THRESHOLD)
+		if(dt >= REQUEST_NEXT_SCHEDULED_SPAN_THRESHOLD)
 		{
 			GULPS_LOG_L1(context_str, " we should download it as it's not been received yet after ", dt/1e6);
 			return true;
@@ -1250,7 +1250,7 @@ bool t_cryptonote_protocol_handler<t_core>::should_download_next_span(cryptonote
 		// in standby, be ready to double download early since we're idling anyway
 		// let the fastest peer trigger first
 		const double dl_speed = context.m_current_speed_down;
-		if (standby && dt >= REQUEST_NEXT_SCHEDULED_SPAN_THRESHOLD_STANDBY && dl_speed > 0)
+		if(standby && dt >= REQUEST_NEXT_SCHEDULED_SPAN_THRESHOLD_STANDBY && dl_speed > 0)
 		{
 			bool download = false;
 			if (m_p2p->for_connection(connection_id, [&](cryptonote_connection_context& ctx, nodetool::peerid_type peer_id, uint32_t f)->bool{
@@ -1258,7 +1258,7 @@ bool t_cryptonote_protocol_handler<t_core>::should_download_next_span(cryptonote
 				const time_t time_since_last_recv = nowt - ctx.m_last_recv;
 				const float last_activity = std::min((float)time_since_last_recv, dt/1e6f);
 				const bool stalled = last_activity > LAST_ACTIVITY_STALL_THRESHOLD;
-				if (stalled)
+				if(stalled)
 				{
 					GULPS_LOG_L1(context_str, " we should download it as the downloading peer is stalling for ",
 						nowt - ctx.m_last_recv, " seconds");
@@ -1274,12 +1274,12 @@ bool t_cryptonote_protocol_handler<t_core>::should_download_next_span(cryptonote
 				const float max_multiplier = 10.f;
 				const float min_multiplier = 1.25f;
 				float multiplier = max_multiplier;
-				if (dt >= REQUEST_NEXT_SCHEDULED_SPAN_THRESHOLD_STANDBY)
+				if(dt >= REQUEST_NEXT_SCHEDULED_SPAN_THRESHOLD_STANDBY)
 				{
 					multiplier = max_multiplier - (dt-REQUEST_NEXT_SCHEDULED_SPAN_THRESHOLD_STANDBY) * (max_multiplier - min_multiplier) / (REQUEST_NEXT_SCHEDULED_SPAN_THRESHOLD - REQUEST_NEXT_SCHEDULED_SPAN_THRESHOLD_STANDBY);
 					multiplier = std::min(max_multiplier, std::max(min_multiplier, multiplier));
 				}
-				if (dl_speed * .8f > ctx.m_current_speed_down * multiplier)
+				if(dl_speed * .8f > ctx.m_current_speed_down * multiplier)
 				{
 					GULPS_LOG_L1(context_str, " we should download it as we are substantially faster (",
 						dl_speed, " vs ", ctx.m_current_speed_down, ", multiplier ", multiplier, " after ", 
@@ -1291,7 +1291,7 @@ bool t_cryptonote_protocol_handler<t_core>::should_download_next_span(cryptonote
 				return true;
 			}))
 			{
-			if (download)
+			if(download)
 				return true;
 			}
 			else
@@ -1358,8 +1358,8 @@ bool t_cryptonote_protocol_handler<t_core>::request_missing_objects(cryptonote_c
 
 			// this needs doing after we went to standby, so the callback knows what to do
 			bool filled;
-          	boost::posix_time::ptime time;
-          	boost::uuids::uuid connection_id;
+			boost::posix_time::ptime time;
+			boost::uuids::uuid connection_id;
 			if(m_block_queue.has_next_span(m_core.get_current_blockchain_height(), filled, time, connection_id) && !filled)
 			{
 				GULPS_LOG_L1( context_str, " we have the next span, and it is scheduled, resuming");
