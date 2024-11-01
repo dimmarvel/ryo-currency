@@ -167,6 +167,7 @@ class t_cryptonote_protocol_handler : public i_cryptonote_protocol, cryptonote_p
 	block_queue m_block_queue;
 	epee::math_helper::once_a_time_seconds<30> m_idle_peer_kicker;
     size_t m_block_download_max_size;
+	uint64_t m_last_add_end_time;
 
 	boost::mutex m_buffer_mutex;
 	double get_avg_block_size();
