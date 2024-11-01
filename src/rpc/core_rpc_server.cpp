@@ -261,7 +261,7 @@ bool core_rpc_server::on_get_alt_blocks_hashes(const COMMAND_RPC_GET_ALT_BLOCKS_
 	if(use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_ALT_BLOCKS_HASHES>(invoke_http_mode::JON, "/get_alt_blocks_hashes", req, res, r))
 		return r;
 
-	std::list<block> blks;
+	std::vector<block> blks;
 
 	if(!m_core.get_alternative_blocks(blks))
 	{
@@ -303,8 +303,8 @@ bool core_rpc_server::on_get_blocks_by_height(const COMMAND_RPC_GET_BLOCKS_BY_HE
 			res.status = "Error retrieving block at height " + std::to_string(height);
 			return true;
 		}
-		std::list<transaction> txs;
-		std::list<crypto::hash> missed_txs;
+		std::vector<transaction> txs;
+		std::vector<crypto::hash> missed_txs;
 		m_core.get_transactions(blk.tx_hashes, txs, missed_txs);
 		res.blocks.resize(res.blocks.size() + 1);
 		res.blocks.back().block = block_to_blob(blk);
@@ -516,8 +516,8 @@ bool core_rpc_server::on_get_transactions(const COMMAND_RPC_GET_TRANSACTIONS::re
 		}
 		vh.push_back(*reinterpret_cast<const crypto::hash *>(b.data()));
 	}
-	std::list<crypto::hash> missed_txs;
-	std::list<transaction> txs;
+	std::vector<crypto::hash> missed_txs;
+	std::vector<transaction> txs;
 	bool r = m_core.get_transactions(vh, txs, missed_txs);
 	if(!r)
 	{
@@ -538,25 +538,26 @@ bool core_rpc_server::on_get_transactions(const COMMAND_RPC_GET_TRANSACTIONS::re
 		if(r)
 		{
 			// sort to match original request
-			std::list<transaction> sorted_txs;
+			std::vector<transaction> sorted_txs;
 			std::vector<tx_info>::const_iterator i;
+			unsigned txs_processed = 0;
 			for(const crypto::hash &h : vh)
 			{
 				if(std::find(missed_txs.begin(), missed_txs.end(), h) == missed_txs.end())
 				{
-					if(txs.empty())
+					if(txs.size() == txs_processed)
 					{
 						res.status = "Failed: internal error - txs is empty";
 						return true;
 					}
 					// core returns the ones it finds in the right order
-					if(get_transaction_hash(txs.front()) != h)
+					if(get_transaction_hash(txs[txs_processed]) != h)
 					{
 						res.status = "Failed: tx hash mismatch";
 						return true;
 					}
-					sorted_txs.push_back(std::move(txs.front()));
-					txs.pop_front();
+					sorted_txs.push_back(std::move(txs[txs_processed]));
+					++txs_processed;
 				}
 				else if((i = std::find_if(pool_tx_info.begin(), pool_tx_info.end(), [h](const tx_info &txi) { return epee::string_tools::pod_to_hex(h) == txi.id_hash; })) != pool_tx_info.end())
 				{
@@ -567,7 +568,7 @@ bool core_rpc_server::on_get_transactions(const COMMAND_RPC_GET_TRANSACTIONS::re
 						return true;
 					}
 					sorted_txs.push_back(tx);
-					missed_txs.remove(h);
+					missed_txs.erase(std::find(missed_txs.begin(), missed_txs.end(), h));
 					pool_tx_hashes.insert(h);
 					const std::string hash_string = epee::string_tools::pod_to_hex(h);
 					for(const auto &ti : pool_tx_info)
@@ -586,7 +587,7 @@ bool core_rpc_server::on_get_transactions(const COMMAND_RPC_GET_TRANSACTIONS::re
 		GULPSF_LOG_L2("Found {}/{} transactions in the pool", found_in_pool , vh.size() );
 	}
 
-	std::list<std::string>::const_iterator txhi = req.txs_hashes.begin();
+	std::vector<std::string>::const_iterator txhi = req.txs_hashes.begin();
 	std::vector<crypto::hash>::const_iterator vhi = vh.begin();
 	for(auto &tx : txs)
 	{
@@ -1667,10 +1668,10 @@ bool core_rpc_server::on_flush_txpool(const COMMAND_RPC_FLUSH_TRANSACTION_POOL::
 	PERF_TIMER(on_flush_txpool);
 
 	bool failed = false;
-	std::list<crypto::hash> txids;
+	std::vector<crypto::hash> txids;
 	if(req.txids.empty())
 	{
-		std::list<transaction> pool_txs;
+		std::vector<transaction> pool_txs;
 		bool r = m_core.get_pool_transactions(pool_txs);
 		if(!r)
 		{

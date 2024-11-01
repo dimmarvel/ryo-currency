@@ -204,7 +204,7 @@ struct COMMAND_RPC_GET_HASHES_FAST
 
 	struct response
 	{
-		std::list<crypto::hash> m_block_ids;
+		std::vector<crypto::hash> m_block_ids;
 		uint64_t start_height;
 		uint64_t current_height;
 		std::string status;
@@ -288,7 +288,7 @@ struct COMMAND_RPC_GET_ADDRESS_TXS
 		uint64_t total_received;
 		uint64_t total_received_unlocked = 0; // OpenMonero only
 		uint64_t scanned_height;
-		std::list<transaction> transactions;
+		std::vector<transaction> transactions;
 		uint64_t blockchain_height;
 		uint64_t scanned_block_height;
 		std::string status;
@@ -570,7 +570,7 @@ struct COMMAND_RPC_GET_TRANSACTIONS
 {
 	struct request
 	{
-		std::list<std::string> txs_hashes;
+		std::vector<std::string> txs_hashes;
 		bool decode_as_json;
 		bool prune;
 
@@ -607,11 +607,11 @@ struct COMMAND_RPC_GET_TRANSACTIONS
 	struct response
 	{
 		// older compatibility stuff
-		std::list<std::string> txs_as_hex;  //transactions blobs as hex (old compat)
-		std::list<std::string> txs_as_json; //transactions decoded as json (old compat)
+		std::vector<std::string> txs_as_hex;  //transactions blobs as hex (old compat)
+		std::vector<std::string> txs_as_json; //transactions decoded as json (old compat)
 
 		// in both old and new
-		std::list<std::string> missed_tx; //not found transactions
+		std::vector<std::string> missed_tx; //not found transactions
 
 		// new style
 		std::vector<entry> txs;
@@ -1929,7 +1929,7 @@ struct COMMAND_RPC_FLUSH_TRANSACTION_POOL
 {
 	struct request
 	{
-		std::list<std::string> txids;
+		std::vector<std::string> txids;
 
 		BEGIN_KV_SERIALIZE_MAP(request)
 		KV_SERIALIZE(txids)
@@ -2121,7 +2121,7 @@ struct COMMAND_RPC_RELAY_TX
 {
 	struct request
 	{
-		std::list<std::string> txids;
+		std::vector<std::string> txids;
 
 		BEGIN_KV_SERIALIZE_MAP(request)
 		KV_SERIALIZE(txids)

@@ -1603,7 +1603,7 @@ void wallet2::parse_block_round(const cryptonote::blobdata &blob, cryptonote::bl
 		bl_id = get_block_hash(bl);
 }
 //----------------------------------------------------------------------------------------------------
-void wallet2::pull_hashes(uint64_t start_height, uint64_t &blocks_start_height, const std::list<crypto::hash> &short_chain_history, std::list<crypto::hash> &hashes)
+void wallet2::pull_hashes(uint64_t start_height, uint64_t &blocks_start_height, const std::list<crypto::hash> &short_chain_history, std::vector<crypto::hash> &hashes)
 {
 	cryptonote::COMMAND_RPC_GET_HASHES_FAST::request req = AUTO_VAL_INIT(req);
 	cryptonote::COMMAND_RPC_GET_HASHES_FAST::response res = AUTO_VAL_INIT(res);
@@ -1883,7 +1883,7 @@ void wallet2::update_pool_state(bool refreshed)
 //----------------------------------------------------------------------------------------------------
 void wallet2::fast_refresh(uint64_t stop_height, uint64_t &blocks_start_height, std::list<crypto::hash> &short_chain_history)
 {
-	std::list<crypto::hash> hashes;
+	std::vector<crypto::hash> hashes;
 
 	const uint64_t checkpoint_height = m_checkpoints.get_max_height();
 	if(stop_height > checkpoint_height && m_blockchain.size() - 1 < checkpoint_height)
@@ -1912,7 +1912,7 @@ void wallet2::fast_refresh(uint64_t stop_height, uint64_t &blocks_start_height, 
 		if(hashes.size() + current_index < stop_height)
 		{
 			drop_from_short_history(short_chain_history, 3);
-			std::list<crypto::hash>::iterator right = hashes.end();
+			std::vector<crypto::hash>::iterator right = hashes.end();
 			// prepend 3 more
 			for(int i = 0; i < 3; i++)
 			{

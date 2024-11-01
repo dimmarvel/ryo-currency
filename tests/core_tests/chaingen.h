@@ -474,7 +474,7 @@ inline bool do_replay_events(std::vector<test_event_entry> &events)
 		std::cout << "Failed to flush txpool" << std::endl;
 		return false;
 	}
-	c.get_blockchain_storage().flush_txes_from_pool(std::list<crypto::hash>(pool_txs.begin(), pool_txs.end()));
+	c.get_blockchain_storage().flush_txes_from_pool(pool_txs);
 
 	t_test_class validator;
 	bool ret = replay_events_through_core<t_test_class>(c, events, validator);
