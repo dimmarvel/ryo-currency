@@ -98,6 +98,12 @@ const command_line::arg_descriptor<bool> arg_offline = {
 const command_line::arg_descriptor<bool> arg_disable_dns_checkpoints = {
 	"disable-dns-checkpoints", "Do not retrieve checkpoints from DNS"};
 
+const command_line::arg_descriptor<size_t> arg_block_download_max_size = {
+	"block-download-max-size"
+	, "Set maximum size of block download queue in bytes (0 for default)"
+	, 0
+};
+
 static const command_line::arg_descriptor<bool> arg_test_drop_download = {
 	"test-drop-download", "For net tests: in download, discard ALL blocks instead checking/saving them (very fast)"};
 static const command_line::arg_descriptor<uint64_t> arg_test_drop_download_height = {
@@ -229,6 +235,7 @@ void core::init_options(boost::program_options::options_description &desc)
 	command_line::add_arg(desc, arg_test_dbg_lock_sleep);
 	command_line::add_arg(desc, arg_offline);
 	command_line::add_arg(desc, arg_disable_dns_checkpoints);
+    command_line::add_arg(desc, arg_block_download_max_size);
 	command_line::add_arg(desc, arg_max_txpool_size);
 
 	miner::init_options(desc);

@@ -60,7 +60,7 @@
 #include "cryptonote_basic/cryptonote_format_utils.h"
 #include "net/network_throttle-detail.hpp"
 #include "profile_tools.h"
-
+#include <common/command_line.h>
 #include "common/gulps.hpp"
 
 
@@ -69,8 +69,9 @@
 
 #define GULPS_P2P_MESSAGE(...) GULPS_OUTPUTF(gulps::OUT_USER_0, gulps::LEVEL_INFO, "p2p", gulps_minor_cat::c_str(), gulps::COLOR_WHITE, __VA_ARGS__)
 
-#define BLOCK_QUEUE_NBLOCKS_THRESHOLD 10					// chunks of N blocks
+#define BLOCK_QUEUE_NSPANS_THRESHOLD 10                     // chunks of N blocks
 #define BLOCK_QUEUE_SIZE_THRESHOLD (100 * 1024 * 1024)		// MB
+#define BLOCK_QUEUE_FORCE_DOWNLOAD_NEAR_BLOCKS 1000
 #define REQUEST_NEXT_SCHEDULED_SPAN_THRESHOLD (5 * 1000000) // microseconds
 #define IDLE_PEER_KICK_TIME (600 * 1000000)					// microseconds
 #define PASSIVE_PEER_KICK_TIME (60 * 1000000)				// microseconds
@@ -96,6 +97,7 @@ t_cryptonote_protocol_handler<t_core>::t_cryptonote_protocol_handler(t_core &rco
 template <class t_core>
 bool t_cryptonote_protocol_handler<t_core>::init(const boost::program_options::variables_map &vm)
 {
+    m_block_download_max_size = command_line::get_arg(vm, cryptonote::arg_block_download_max_size);
 	return true;
 }
 //------------------------------------------------------------------------------------------------------------------------
@@ -977,7 +979,8 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 				uint64_t start_height;
 				std::vector<cryptonote::block_complete_entry> blocks;
 				boost::uuids::uuid span_connection_id;
-				if(!m_block_queue.get_next_span(start_height, blocks, span_connection_id))
+                epee::net_utils::network_address span_origin;
+          		if (!m_block_queue.get_next_span(start_height, blocks, span_connection_id, span_origin))
 				{
 					GULPS_LOG_L1( context_str," no next span found, going back to download");
 					break;
@@ -1307,118 +1310,120 @@ bool t_cryptonote_protocol_handler<t_core>::should_download_next_span(cryptonote
 template<class t_core>
 bool t_cryptonote_protocol_handler<t_core>::request_missing_objects(cryptonote_connection_context& context, bool check_having_blocks, bool force_next_span)
 {
-    // Удаление устаревших интервалов
-    std::set<boost::uuids::uuid> live_connections;
-    m_p2p->for_each_connection([&](cryptonote_connection_context& context, nodetool::peerid_type peer_id, uint32_t support_flags)->bool{
-        live_connections.insert(context.m_connection_id);
-        return true;
-    });
-    m_block_queue.flush_stale_spans(live_connections);
+	// flush stale spans
+	std::set<boost::uuids::uuid> live_connections;
+	m_p2p->for_each_connection([&](cryptonote_connection_context& context, nodetool::peerid_type peer_id, uint32_t support_flags)->bool{
+		live_connections.insert(context.m_connection_id);
+		return true;
+	});
+	m_block_queue.flush_stale_spans(live_connections);
 
-    // Проверка необходимости запроса следующего интервала
-    bool start_from_current_chain = false;
-    if (!force_next_span)
-    {
-        do
-        {
-            size_t nspans = m_block_queue.get_num_filled_spans();
-            size_t size = m_block_queue.get_data_size();
-            const uint64_t bc_height = m_core.get_current_blockchain_height();
-            const size_t block_queue_size_threshold = m_block_download_max_size ? m_block_download_max_size : BLOCK_QUEUE_SIZE_THRESHOLD;
-            bool queue_proceed = nspans < BLOCK_QUEUE_NSPANS_THRESHOLD || size < block_queue_size_threshold;
+	bool start_from_current_chain = false;
+	if (!force_next_span)
+	{
+		do
+		{
+			size_t nspans = m_block_queue.get_num_filled_spans();
+			size_t size = m_block_queue.get_data_size();
+			const uint64_t bc_height = m_core.get_current_blockchain_height();
+			const size_t block_queue_size_threshold = m_block_download_max_size ? m_block_download_max_size : BLOCK_QUEUE_SIZE_THRESHOLD;
+			bool queue_proceed = nspans < BLOCK_QUEUE_NSPANS_THRESHOLD || size < block_queue_size_threshold;
+			
+			// get rid of blocks we already requested, or already have
+			if (skip_unneeded_hashes(context, true) && context.m_needed_objects.empty() && context.m_num_requested == 0)
+			{
+				if (context.m_remote_blockchain_height > m_block_queue.get_next_needed_height(bc_height))
+				{
+					GULPS_ERROR("ERROR: No data to request from peer {}", context);
+					return false;
+				}
+				GULPSF_INFO("{} No need to get data from this peer", context);
+				context.m_state = cryptonote_connection_context::state_normal;
+				if (m_core.get_current_blockchain_height() >= m_core.get_target_blockchain_height())
+					on_connection_synchronized();
+				return true;
+			}
 
-            if (skip_unneeded_hashes(context, true) && context.m_needed_objects.empty() && context.m_num_requested == 0)
-            {
-                if (context.m_remote_blockchain_height > m_block_queue.get_next_needed_height(bc_height))
-                {
-                    GULPS_ERROR("ERROR: No data to request from peer {}", context);
-                    return false;
-                }
-                GULPSF_INFO("{} No need to get data from this peer", context);
-                context.m_state = cryptonote_connection_context::state_normal;
-                if (m_core.get_current_blockchain_height() >= m_core.get_target_blockchain_height())
-                    on_connection_synchronized();
-                return true;
-            }
+			uint64_t next_needed_height = m_block_queue.get_next_needed_height(bc_height);
+			uint64_t next_block_height = context.m_needed_objects.empty() ? next_needed_height : context.m_last_response_height - context.m_needed_objects.size() + 1;
+			bool proceed = queue_proceed && (next_block_height < bc_height + BLOCK_QUEUE_FORCE_DOWNLOAD_NEAR_BLOCKS || next_needed_height < bc_height + BLOCK_QUEUE_FORCE_DOWNLOAD_NEAR_BLOCKS);
 
-            uint64_t next_needed_height = m_block_queue.get_next_needed_height(bc_height);
-            uint64_t next_block_height = context.m_needed_objects.empty() ? next_needed_height : context.m_last_response_height - context.m_needed_objects.size() + 1;
-            bool proceed = queue_proceed && (next_block_height < bc_height + BLOCK_QUEUE_FORCE_DOWNLOAD_NEAR_BLOCKS || next_needed_height < bc_height + BLOCK_QUEUE_FORCE_DOWNLOAD_NEAR_BLOCKS);
+			if (!proceed)
+			{
+				if (should_drop_connection(context, 0))
+				{
+					if (!context.m_is_income)
+						m_p2p->add_used_stripe_peer(context);
+					return false; // Отключение исходящих соединений
+				}
 
-            if (!proceed)
-            {
-                if (should_drop_connection(context, 0))
-                {
-                    if (!context.m_is_income)
-                        m_p2p->add_used_stripe_peer(context);
-                    return false; // Отключение исходящих соединений
-                }
+				if (context.m_state != cryptonote_connection_context::state_standby)
+					GULPSF_LOG_L1("{} Block queue: {} spans, size = {}, pausing", context, nspans, size);
+				context.m_state = cryptonote_connection_context::state_standby;
+				GULPS_GLOBAL_PRINT_CLR(gulps::COLOR_YELLOW, "Pausing peer sync");
+				return true;
+			}
+		} while (0);
+		context.m_state = cryptonote_connection_context::state_synchronizing;
+	}
 
-                if (context.m_state != cryptonote_connection_context::state_standby)
-                    GULPSF_LOG_L1("{} Block queue: {} spans, size = {}, pausing", context, nspans, size);
-                context.m_state = cryptonote_connection_context::state_standby;
-                GULPS_GLOBAL_PRINT_CLR(gulps::COLOR_YELLOW, "Pausing peer sync");
-                return true;
-            }
-        } while (0);
-        context.m_state = cryptonote_connection_context::state_synchronizing;
-    }
+	if (context.m_needed_objects.size() || force_next_span)
+	{
+		NOTIFY_REQUEST_GET_OBJECTS::request req;
+		size_t count = 0;
+		const size_t count_limit = m_core.get_block_sync_size(m_core.get_current_blockchain_height());
 
-    if (context.m_needed_objects.size() || force_next_span)
-    {
-        // Формирование запроса на объекты
-        NOTIFY_REQUEST_GET_OBJECTS::request req;
-        size_t count = 0;
-        const size_t count_limit = m_core.get_block_sync_size(m_core.get_current_blockchain_height());
+		std::pair<uint64_t, uint64_t> span = force_next_span ? m_block_queue.get_next_span_if_scheduled({}, {}, {}) : m_block_queue.reserve_span(context.m_last_response_height - context.m_needed_objects.size() + 1, context.m_last_response_height, count_limit, context.m_connection_id, context.m_remote_address, false, 0, 0, context.m_remote_blockchain_height, context.m_needed_objects);
 
-        std::pair<uint64_t, uint64_t> span = force_next_span ? m_block_queue.get_next_span_if_scheduled({}, {}, {}) : m_block_queue.reserve_span(context.m_last_response_height - context.m_needed_objects.size() + 1, context.m_last_response_height, count_limit, context.m_connection_id, context.m_remote_address, false, 0, 0, context.m_remote_blockchain_height, context.m_needed_objects);
+		GULPSF_INFO("{} Span reserved: height {}/{}", context, span.first, span.second);
 
-        GULPSF_INFO("{} Span reserved: height {}/{}", context, span.first, span.second);
+		if (span.second > 0)
+		{
+			req.blocks.reserve(context.m_needed_objects.size());
+			for (const auto& [hash, height] : context.m_needed_objects)
+			{
+				req.blocks.push_back(hash);
+				++count;
+				context.m_requested_objects.insert(hash);
+			}
+			context.m_needed_objects.clear();
+			context.m_num_requested += req.blocks.size();
 
-        if (span.second > 0)
-        {
-            req.blocks.reserve(context.m_needed_objects.size());
-            for (const auto& [hash, height] : context.m_needed_objects)
-            {
-                req.blocks.push_back(hash);
-                ++count;
-                context.m_requested_objects.insert(hash);
-            }
-            context.m_needed_objects.clear();
-            context.m_num_requested += req.blocks.size();
+			post_notify<NOTIFY_REQUEST_GET_OBJECTS>(req, context);
+			GULPS_GLOBAL_PRINT_CLR(gulps::COLOR_BLUE, "Requesting objects from peer");
+			return true;
+		}
+	}
 
-            post_notify<NOTIFY_REQUEST_GET_OBJECTS>(req, context);
-            GULPS_GLOBAL_PRINT_CLR(gulps::COLOR_BLUE, "Requesting objects from peer");
-            return true;
-        }
-    }
+	context.m_needed_objects.clear();
 
-    context.m_needed_objects.clear();
+	if (context.m_last_response_height < context.m_remote_blockchain_height - 1)
+	{
+		NOTIFY_REQUEST_CHAIN::request r = {};
+		context.m_expect_height = m_core.get_current_blockchain_height();
+		m_core.get_short_chain_history(r.block_ids);
+		r.prune = false;
 
-    // Переход к запросу цепочки блоков при необходимости
-    if (context.m_last_response_height < context.m_remote_blockchain_height - 1)
-    {
-        NOTIFY_REQUEST_CHAIN::request r = {};
-        context.m_expect_height = m_core.get_current_blockchain_height();
-        m_core.get_short_chain_history(r.block_ids);
-        r.prune = false;
-
-        context.m_last_request_time = boost::posix_time::microsec_clock::universal_time();
-        context.m_expect_response = NOTIFY_RESPONSE_CHAIN_ENTRY::ID;
-        GULPSF_LOG_L1("{} -->>NOTIFY_REQUEST_CHAIN: block_ids.size() = {}", context, r.block_ids.size());
-        post_notify<NOTIFY_REQUEST_CHAIN>(r, context);
-        GULPS_GLOBAL_PRINT_CLR(gulps::COLOR_GREEN, "Requesting block chain from peer");
-    }
-    else
-    {
-        context.m_state = cryptonote_connection_context::state_normal;
-        if (context.m_remote_blockchain_height >= m_core.get_target_blockchain_height())
-        {
-            if (m_core.get_current_blockchain_height() >= m_core.get_target_blockchain_height())
-                on_connection_synchronized();
-        }
-    }
-    return true;
+		context.m_last_request_time = boost::posix_time::microsec_clock::universal_time();
+		context.m_expect_response = NOTIFY_RESPONSE_CHAIN_ENTRY::ID;
+		GULPSF_LOG_L1("{} -->>NOTIFY_REQUEST_CHAIN: block_ids.size() = {}", context, r.block_ids.size());
+		post_notify<NOTIFY_REQUEST_CHAIN>(r, context);
+		GULPS_GLOBAL_PRINT_CLR(gulps::COLOR_GREEN, "Requesting block chain from peer");
+	}
+	else
+	{
+		context.m_state = cryptonote_connection_context::state_normal;
+		if (context.m_remote_blockchain_height >= m_core.get_target_blockchain_height())
+		{
+			if (m_core.get_current_blockchain_height() >= m_core.get_target_blockchain_height())
+				on_connection_synchronized();
+		}
+		else
+		{
+			MINFO(context << " we've reached this peer's blockchain height (theirs " << context.m_remote_blockchain_height << ", our target " << m_core.get_target_blockchain_height());
+		}
+	}
+	return true;
 }
 //------------------------------------------------------------------------------------------------------------------------
 template <class t_core>

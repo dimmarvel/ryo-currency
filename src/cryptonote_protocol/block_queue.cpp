@@ -176,6 +176,25 @@ uint64_t block_queue::get_max_block_height() const
 	return height;
 }
 
+uint64_t block_queue::get_next_needed_height(uint64_t blockchain_height) const
+{
+	boost::unique_lock<boost::recursive_mutex> lock(mutex);
+	if (blocks.empty())
+		return blockchain_height;
+	uint64_t last_needed_height = blockchain_height;
+	bool first = true;
+	for (const auto &span: blocks)
+	{
+		if (span.start_block_height + span.nblocks - 1 < blockchain_height)
+			continue;
+		if (span.start_block_height != last_needed_height || (first && span.blocks.empty()))
+			return last_needed_height;
+		last_needed_height = span.start_block_height + span.nblocks;
+		first = false;
+	}
+	return last_needed_height;
+}
+
 void block_queue::print() const
 {
 	boost::unique_lock<boost::recursive_mutex> lock(mutex);
