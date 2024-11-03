@@ -1212,6 +1212,11 @@ difficulty_type core::get_block_cumulative_difficulty(uint64_t height) const
 	return m_blockchain_storage.get_db().get_block_cumulative_difficulty(height);
 }
 //-----------------------------------------------------------------------------------------------
+bool core::have_block_unlocked(const crypto::hash& id, int *where) const
+{
+	return m_blockchain_storage.have_block_unlocked(id, where);
+}
+//-----------------------------------------------------------------------------------------------
 size_t core::get_pool_transactions_count() const
 {
 	return m_mempool.get_transactions_count();
@@ -1365,6 +1370,11 @@ uint8_t core::get_ideal_hard_fork_version(uint64_t height) const
 uint8_t core::get_hard_fork_version(uint64_t height) const
 {
 	return get_blockchain_storage().get_hard_fork_version(height);
+}
+//-----------------------------------------------------------------------------------------------
+uint64_t core::get_earliest_ideal_height_for_version(uint8_t version) const
+{
+	return get_blockchain_storage().get_earliest_ideal_height_for_version(version);
 }
 //-----------------------------------------------------------------------------------------------
 bool core::check_updates()

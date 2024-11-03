@@ -353,7 +353,8 @@ class Blockchain
      *
      * @return true if the block is known, else false
      */
-	bool have_block(const crypto::hash &id) const;
+     bool have_block_unlocked(const crypto::hash& id, int *where = NULL) const;
+	bool have_block(const crypto::hash &id, int *where = NULL) const;
 
 	/**
      * @brief gets the total number of transactions on the main chain
@@ -804,6 +805,13 @@ class Blockchain
      * @return the version
      */
 	uint8_t get_hard_fork_version(uint64_t height) const { return m_hardfork->get(height); }
+
+     /**
+     * @brief returns the earliest block a given version may activate
+     *
+     * @return the height
+     */
+     uint64_t get_earliest_ideal_height_for_version(uint8_t version) const { return m_hardfork->get_earliest_ideal_height_for_version(version); }
 
 	/**
      * @brief get information about hardfork voting for a version

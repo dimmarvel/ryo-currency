@@ -204,6 +204,11 @@ class HardFork
      */
 	uint8_t get_next_version() const;
 
+     /**
+     * @brief returns the earliest block a given version may activate
+     */
+     uint64_t get_earliest_ideal_height_for_version(uint8_t version) const;
+
 	/**
      * @brief returns the current version
      *

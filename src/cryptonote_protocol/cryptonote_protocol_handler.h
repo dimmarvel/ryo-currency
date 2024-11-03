@@ -59,6 +59,7 @@
 #include "cryptonote_protocol_defs.h"
 #include "cryptonote_protocol_handler_common.h"
 #include "math_helper.h"
+#include "common/perf_timer.h"
 #include "storages/levin_abstract_invoke2.h"
 #include "warnings.h"
 #include <boost/circular_buffer.hpp>
@@ -130,6 +131,7 @@ class t_cryptonote_protocol_handler : public i_cryptonote_protocol, cryptonote_p
 	const block_queue &get_block_queue() const { return m_block_queue; }
 	void stop();
 	void on_connection_close(cryptonote_connection_context &context);
+    std::string get_peers_overview() const;
 
   private:
 	//----------------- commands handlers ----------------------------------------------
@@ -152,9 +154,11 @@ class t_cryptonote_protocol_handler : public i_cryptonote_protocol, cryptonote_p
 	bool on_connection_synchronized();
 	bool should_download_next_span(cryptonote_connection_context &context, bool standby) const;
 	void drop_connection(cryptonote_connection_context &context, bool add_fail, bool flush_all_spans);
+	void drop_connection_with_score(cryptonote_connection_context &context, unsigned int score, bool flush_all_spans);
 	bool kick_idle_peers();
 	int try_add_next_blocks(cryptonote_connection_context &context);
 	size_t skip_unneeded_hashes(cryptonote_connection_context& context, bool check_block_queue) const;
+	void hit_score(cryptonote_connection_context &context, int32_t score);
 
 	t_core &m_core;
 
@@ -166,8 +170,18 @@ class t_cryptonote_protocol_handler : public i_cryptonote_protocol, cryptonote_p
 	boost::mutex m_sync_lock;
 	block_queue m_block_queue;
 	epee::math_helper::once_a_time_seconds<30> m_idle_peer_kicker;
-    size_t m_block_download_max_size;
+	tools::PerformanceTimer m_sync_timer, m_add_timer;
 	uint64_t m_last_add_end_time;
+	uint64_t m_sync_download_chain_size, m_sync_download_objects_size;
+	size_t m_block_download_max_size;
+
+	// Values for sync time estimates
+	boost::posix_time::ptime m_sync_start_time;
+	boost::posix_time::ptime m_period_start_time;
+	uint64_t m_sync_start_height;
+	uint64_t m_period_start_height;
+	uint64_t get_estimated_remaining_sync_seconds(uint64_t current_blockchain_height, uint64_t target_blockchain_height);
+	std::string get_periodic_sync_estimate(uint64_t current_blockchain_height, uint64_t target_blockchain_height);
 
 	boost::mutex m_buffer_mutex;
 	double get_avg_block_size();

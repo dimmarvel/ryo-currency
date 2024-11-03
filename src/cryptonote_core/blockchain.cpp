@@ -2568,30 +2568,42 @@ bool Blockchain::add_block_as_invalid(const block_extended_info &bei, const cryp
 	return true;
 }
 //------------------------------------------------------------------
-bool Blockchain::have_block(const crypto::hash &id) const
+bool Blockchain::have_block_unlocked(const crypto::hash& id, int *where) const
 {
-	GULPS_LOG_L3("Blockchain::", __func__);
-	CRITICAL_REGION_LOCAL(m_blockchain_lock);
+	// WARNING: this function does not take m_blockchain_lock, and thus should only call read only
+	// m_db functions which do not depend on one another (ie, no getheight + gethash(height-1), as
+	// well as not accessing class members, even read only (ie, m_invalid_blocks). The caller must
+	// lock if it is otherwise needed.
+	GULPSF_LOG_L3("Blockchain::", __func__);
 
 	if(m_db->block_exists(id))
 	{
-		GULPS_LOG_L3("block exists in main chain");
-		return true;
+		GULPSF_LOG_L2("block {} found in main chain", id);
+		if (where) *where = HAVE_BLOCK_MAIN_CHAIN;
+			return true;
 	}
 
-	if(m_alternative_chains.count(id))
+	if(m_db->get_alt_block(id, NULL, NULL))
 	{
-		GULPS_LOG_L3("block found in m_alternative_chains");
-		return true;
+		GULPSF_LOG_L2("block {} found in alternative chains", id);
+		if (where) *where = HAVE_BLOCK_ALT_CHAIN;
+			return true;
 	}
 
 	if(m_invalid_blocks.count(id))
 	{
-		GULPS_LOG_L3("block found in m_invalid_blocks");
-		return true;
+		GULPSF_LOG_L2("block {} found in m_invalid_blocks", id);
+		if (where) *where = HAVE_BLOCK_INVALID;
+			return true;
 	}
 
 	return false;
+}
+//------------------------------------------------------------------
+bool Blockchain::have_block(const crypto::hash& id, int *where) const
+{
+	CRITICAL_REGION_LOCAL(m_blockchain_lock);
+	return have_block_unlocked(id, where);
 }
 //------------------------------------------------------------------
 bool Blockchain::handle_block_to_main_chain(const block &bl, block_verification_context &bvc)

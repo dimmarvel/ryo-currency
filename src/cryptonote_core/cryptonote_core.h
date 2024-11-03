@@ -68,6 +68,8 @@
 PUSH_WARNINGS
 DISABLE_VS_WARNINGS(4355)
 
+enum { HAVE_BLOCK_MAIN_CHAIN, HAVE_BLOCK_ALT_CHAIN, HAVE_BLOCK_INVALID };
+
 namespace cryptonote
 {
 struct test_options
@@ -501,11 +503,12 @@ class core : public i_miner_handler
 	size_t get_pool_transactions_count() const;
 
 	/**
-      * @copydoc Blockchain::get_total_transactions
+      * @copydoc Blockchain::have_block
       *
-      * @note see Blockchain::get_total_transactions
+      * @note see Blockchain::have_block
       */
-	size_t get_blockchain_total_transactions() const;
+      bool have_block_unlocked(const crypto::hash& id, int *where = NULL) const;
+      bool have_block(const crypto::hash& id, int *where = NULL) const;
 
 	/**
       * @copydoc Blockchain::have_block
@@ -682,6 +685,13 @@ class core : public i_miner_handler
       * @return what it says above
       */
 	uint8_t get_hard_fork_version(uint64_t height) const;
+
+     /**
+      * @brief return the earliest block a given version may activate
+      *
+      * @return what it says above
+      */
+     uint64_t get_earliest_ideal_height_for_version(uint8_t version) const;
 
 	/**
       * @brief gets start_time

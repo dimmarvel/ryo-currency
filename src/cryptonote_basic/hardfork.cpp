@@ -416,6 +416,19 @@ uint8_t HardFork::get_ideal_version(uint64_t height) const
 	return original_version;
 }
 
+uint64_t HardFork::get_earliest_ideal_height_for_version(uint8_t version) const
+{
+	uint64_t height = std::numeric_limits<uint64_t>::max();
+	for (auto i = heights.rbegin(); i != heights.rend(); ++i) {
+		if (i->version >= version) {
+			height = i->height;
+		} else {
+			break;
+		}
+	}
+	return height;
+}
+
 uint64_t HardFork::get_height_for_version(uint8_t version) const
 {
 	for(const Params& fork : heights)
@@ -452,7 +465,7 @@ bool HardFork::get_voting_info(uint8_t version, uint32_t &window, uint32_t &vote
 		votes += last_versions[n];
 	threshold = (window * heights[current_fork_index].threshold + 99) / 100;
 	//assert((votes >= threshold) == enabled);
-	earliest_height = get_height_for_version(version);
+	earliest_height = get_earliest_ideal_height_for_version(version);
 	voting = heights.back().version;
 	return enabled;
 }
