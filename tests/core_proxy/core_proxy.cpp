@@ -253,7 +253,7 @@ bool tests::proxy_core::init(const boost::program_options::variables_map & /*vm*
 	return true;
 }
 
-bool tests::proxy_core::have_block(const crypto::hash &id)
+bool tests::proxy_core::have_block(const crypto::hash& id, int *where)
 {
 	if(m_hash2blkidx.end() == m_hash2blkidx.find(id))
 		return false;

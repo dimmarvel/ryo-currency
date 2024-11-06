@@ -57,7 +57,11 @@ namespace cryptonote
 {
 GULPS_CAT_MAJOR("rpc_args");
 rpc_args::descriptors::descriptors()
-	: rpc_bind_ip({"rpc-bind-ip", rpc_args::tr("Specify IP to bind RPC server"), "127.0.0.1"}), rpc_login({"rpc-login", rpc_args::tr("Specify username[:password] required for RPC server"), "", true}), confirm_external_bind({"confirm-external-bind", rpc_args::tr("Confirm rpc-bind-ip value is NOT a loopback (local) IP")}), rpc_access_control_origins({"rpc-access-control-origins", rpc_args::tr("Specify a comma separated list of origins to allow cross origin resource sharing"), ""})
+	: rpc_bind_ip({"rpc-bind-ip", rpc_args::tr("Specify IP to bind RPC server"), "127.0.0.1"}),
+	rpc_login({"rpc-login", rpc_args::tr("Specify username[:password] required for RPC server"), "", true}),
+	confirm_external_bind({"confirm-external-bind", rpc_args::tr("Confirm rpc-bind-ip value is NOT a loopback (local) IP")}),
+	rpc_access_control_origins({"rpc-access-control-origins", rpc_args::tr("Specify a comma separated list of origins to allow cross origin resource sharing"), ""}),
+	disable_rpc_ban({"disable-rpc-ban", rpc_args::tr("Do not ban hosts on RPC errors"), false, false})
 {
 }
 
@@ -70,6 +74,7 @@ void rpc_args::init_options(boost::program_options::options_description &desc)
 	command_line::add_arg(desc, arg.rpc_login);
 	command_line::add_arg(desc, arg.confirm_external_bind);
 	command_line::add_arg(desc, arg.rpc_access_control_origins);
+	command_line::add_arg(desc, arg.disable_rpc_ban);
 }
 
 boost::optional<rpc_args> rpc_args::process(const boost::program_options::variables_map &vm)
@@ -78,6 +83,7 @@ boost::optional<rpc_args> rpc_args::process(const boost::program_options::variab
 	rpc_args config{};
 
 	config.bind_ip = command_line::get_arg(vm, arg.rpc_bind_ip);
+    config.disable_rpc_ban = command_line::get_arg(vm, arg.disable_rpc_ban);
 	if(!config.bind_ip.empty())
 	{
 		// always parse IP here for error consistency

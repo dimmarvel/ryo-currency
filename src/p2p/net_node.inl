@@ -214,8 +214,47 @@ bool node_server<t_payload_net_handler>::make_default_config()
 template <class t_payload_net_handler>
 bool node_server<t_payload_net_handler>::block_host(const epee::net_utils::network_address &addr, time_t seconds)
 {
+	if(!addr.is_blockable())
+		return false;
+
+	const time_t now = time(nullptr);
+	bool added = false;
+
 	CRITICAL_REGION_LOCAL(m_blocked_hosts_lock);
-	m_blocked_hosts[addr.host_str()] = time(nullptr) + seconds;
+	time_t limit;
+	if (now > std::numeric_limits<time_t>::max() - seconds)
+		limit = std::numeric_limits<time_t>::max();
+	else
+		limit = now + seconds;
+	const std::string host_str = addr.host_str();
+	auto it = m_blocked_hosts.find(host_str);
+	if (it == m_blocked_hosts.end())
+	{
+		m_blocked_hosts[host_str] = limit;
+
+		// if the host was already blocked due to being in a blocked subnet, let it be silent
+		bool matches_blocked_subnet = false;
+		if (addr.get_type_id() == epee::net_utils::address_type::ipv4)
+		{
+			auto ipv4_address = addr.template as<epee::net_utils::ipv4_network_address>();
+			for (auto jt = m_blocked_subnets.begin(); jt != m_blocked_subnets.end(); ++jt)
+			{
+				if (jt->first.matches(ipv4_address))
+				{
+					matches_blocked_subnet = true;
+					break;
+				}
+			}
+		}
+		if (!matches_blocked_subnet)
+			added = true;
+	}
+	else if (it->second < limit || !add_only)
+		it->second = limit;
+
+	// drop any connection to that address. This should only have to look into
+	// the zone related to the connection, but really make sure everything is
+	// swept ...
 
 	// drop any connection to that IP
 	std::list<boost::uuids::uuid> conns;
@@ -248,8 +287,11 @@ bool node_server<t_payload_net_handler>::unblock_host(const epee::net_utils::net
 template <class t_payload_net_handler>
 bool node_server<t_payload_net_handler>::add_host_fail(const epee::net_utils::network_address &address)
 {
+	if(!address.is_blockable())
+		return false;
+
 	CRITICAL_REGION_LOCAL(m_host_fails_score_lock);
-	uint64_t fails = ++m_host_fails_score[address.host_str()];
+    uint64_t fails = m_host_fails_score[address.host_str()] += score;
 	GULPSF_LOG_L1("Host {} fail score={}", address.host_str() , fails);
 	if(fails > P2P_IP_FAILS_BEFORE_BLOCK)
 	{

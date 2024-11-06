@@ -58,7 +58,7 @@ class test_core
 	bool deinit() { return true; }
 	bool get_short_chain_history(std::list<crypto::hash> &ids) const { return true; }
 	bool get_stat_info(cryptonote::core_stat_info &st_inf) const { return true; }
-	bool have_block(const crypto::hash &id) const { return true; }
+	bool have_block(const crypto::hash &id, int *where = NULL) const { return true; }
 	void get_blockchain_top(uint64_t &height, crypto::hash &top_id) const
 	{
 		height = 0;

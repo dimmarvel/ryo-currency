@@ -361,6 +361,7 @@ class node_server : public epee::levin::levin_commands_handler<p2p_connection_co
 
 	epee::critical_section m_host_fails_score_lock;
 	std::map<std::string, uint64_t> m_host_fails_score;
+	bool disable_rpc_ban;
 
 	cryptonote::network_type m_nettype;
 };

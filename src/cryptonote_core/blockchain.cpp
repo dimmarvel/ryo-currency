@@ -1649,6 +1649,7 @@ bool Blockchain::handle_alternative_block(const block &b, const crypto::hash &id
 		{
 			GULPSF_VERIFY_ERR_BLK("Block with id: {}\nfor alternative chain, does not have enough proof of work: {}\nexpected difficulty: {}", id, proof_of_work, current_diff);
 			bvc.m_verifivation_failed = true;
+			bvc.m_bad_pow = true;
 			return false;
 		}
 
@@ -2583,7 +2584,7 @@ bool Blockchain::have_block_unlocked(const crypto::hash& id, int *where) const
 			return true;
 	}
 
-	if(m_db->get_alt_block(id, NULL, NULL))
+	if(m_alternative_chains.count(id))
 	{
 		GULPSF_LOG_L2("block {} found in alternative chains", id);
 		if (where) *where = HAVE_BLOCK_ALT_CHAIN;
@@ -3647,6 +3648,7 @@ bool Blockchain::handle_block_to_main_chain(const block &bl, const crypto::hash 
 		{
 			GULPSF_VERIFY_ERR_BLK("Block with id: {}\ndoes not have enough proof of work: {}\nunexpected difficulty: {}", id, proof_of_work, current_diffic);
 			bvc.m_verifivation_failed = true;
+			bvc.m_bad_pow = true;
 			goto leave;
 		}
 	}

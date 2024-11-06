@@ -100,7 +100,9 @@ void core_rpc_server::init_options(boost::program_options::options_description &
 //------------------------------------------------------------------------------------------------------------------------------
 core_rpc_server::core_rpc_server(
 	core &cr, nodetool::node_server<cryptonote::t_cryptonote_protocol_handler<cryptonote::core>> &p2p)
-	: m_core(cr), m_p2p(p2p)
+	: m_core(cr)
+	, m_p2p(p2p)
+	, disable_rpc_ban(false)
 {
 }
 //------------------------------------------------------------------------------------------------------------------------------
@@ -115,6 +117,7 @@ bool core_rpc_server::init(
 	if(!rpc_config)
 		return false;
 
+	disable_rpc_ban = rpc_config->disable_rpc_ban;
 	m_bootstrap_daemon_address = command_line::get_arg(vm, arg_bootstrap_daemon_address);
 	if(!m_bootstrap_daemon_address.empty())
 	{
@@ -157,6 +160,25 @@ bool core_rpc_server::check_core_ready()
 	}
 	return true;
 }
+//------------------------------------------------------------------------------------------------------------------------------
+bool core_rpc_server::add_host_fail(const connection_context *ctx, unsigned int score)
+{
+	if(!ctx || !ctx->m_remote_address.is_blockable() || disable_rpc_ban)
+		return false;
+
+	CRITICAL_REGION_LOCAL(m_host_fails_score_lock);
+	uint64_t fails = m_host_fails_score[ctx->m_remote_address.host_str()] += score;
+	GULPSF_LOG_L1("Host {} fail score={}", ctx->m_remote_address.host_str(), fails);
+	if(fails > RPC_IP_FAILS_BEFORE_BLOCK)
+	{
+		auto it = m_host_fails_score.find(ctx->m_remote_address.host_str());
+		GULPS_CHECK_AND_ASSERT_MES(it != m_host_fails_score.end(), false, "internal error");
+		it->second = RPC_IP_FAILS_BEFORE_BLOCK/2;
+		m_p2p.block_host(ctx->m_remote_address);
+	}
+	return true;
+}
+
 #define CHECK_CORE_READY()                     \
 	do                                         \
 	{                                          \
@@ -231,7 +253,7 @@ bool core_rpc_server::on_get_info(const COMMAND_RPC_GET_INFO::request &req, COMM
 	return true;
 }
 //------------------------------------------------------------------------------------------------------------------------------
-bool core_rpc_server::on_get_blocks(const COMMAND_RPC_GET_BLOCKS_FAST::request &req, COMMAND_RPC_GET_BLOCKS_FAST::response &res)
+bool core_rpc_server::on_get_blocks(const COMMAND_RPC_GET_BLOCKS_FAST::request &req, COMMAND_RPC_GET_BLOCKS_FAST::response &res, const connection_context *ctx)
 {
 	PERF_TIMER(on_get_blocks);
 	bool r;
@@ -248,6 +270,7 @@ bool core_rpc_server::on_get_blocks(const COMMAND_RPC_GET_BLOCKS_FAST::request &
 		res.current_height, res.start_height, COMMAND_RPC_GET_BLOCKS_FAST_MAX_COUNT))
 	{
 		res.status = "Failed";
+		add_host_fail(ctx);
 		return false;
 	}
 
@@ -315,7 +338,7 @@ bool core_rpc_server::on_get_blocks_by_height(const COMMAND_RPC_GET_BLOCKS_BY_HE
 	return true;
 }
 //------------------------------------------------------------------------------------------------------------------------------
-bool core_rpc_server::on_get_hashes(const COMMAND_RPC_GET_HASHES_FAST::request &req, COMMAND_RPC_GET_HASHES_FAST::response &res)
+bool core_rpc_server::on_get_hashes(const COMMAND_RPC_GET_HASHES_FAST::request &req, COMMAND_RPC_GET_HASHES_FAST::response &res, const connection_context *ctx)
 {
 	PERF_TIMER(on_get_hashes);
 	bool r;
@@ -328,6 +351,7 @@ bool core_rpc_server::on_get_hashes(const COMMAND_RPC_GET_HASHES_FAST::request &
 	if(!m_core.find_blockchain_supplement(req.block_ids, resp))
 	{
 		res.status = "Failed";
+		add_host_fail(ctx);
 		return false;
 	}
 	res.current_height = resp.total_height;

@@ -79,6 +79,7 @@
 #define REQUEST_NEXT_SCHEDULED_SPAN_THRESHOLD_STANDBY (5 * 1000000) // microseconds
 #define DROP_ON_SYNC_WEDGE_THRESHOLD (30 * 1000000000ull) 	// nanoseconds
 #define LAST_ACTIVITY_STALL_THRESHOLD (2.0f)				// seconds
+#define DROP_PEERS_ON_SCORE -2
 
 namespace cryptonote
 {
@@ -159,13 +160,6 @@ bool t_cryptonote_protocol_handler<t_core>::on_callback(cryptonote_connection_co
 				}
 			}
 		}
-	}
-
-	notified = true;
-	if (context.m_new_stripe_notification.compare_exchange_strong(notified, not notified))
-	{
-		if (context.m_state == cryptonote_connection_context::state_normal)
-			context.m_state = cryptonote_connection_context::state_synchronizing;
 	}
 
 	if(context.m_state == cryptonote_connection_context::state_synchronizing && context.m_last_request_time == boost::posix_time::not_a_date_time)
@@ -1127,6 +1121,7 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 		{
 			m_core.pause_mine();
 			m_add_timer.resume();
+			bool starting = true;
 			epee::misc_utils::auto_scope_leave_caller scope_exit_handler = epee::misc_utils::create_scope_leave_handler([this, &starting]() {
 				m_add_timer.pause();
 				m_core.resume_mine();
@@ -1203,7 +1198,21 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 					}
 				}
 
+				std::vector<block> pblocks;
 				m_core.prepare_handle_incoming_blocks(blocks);
+				if (!m_core.prepare_handle_incoming_blocks(blocks, pblocks))
+				{
+					GULPS_ERROR("Failure in prepare_handle_incoming_blocks");
+					drop_connections(span_origin);
+					return 1;
+				}
+
+				if (!pblocks.empty() && pblocks.size() != blocks.size())
+				{
+					m_core.cleanup_handle_incoming_blocks();
+					GULPS_ERROR("Internal error: blocks.size() != block_entry.txs.size()");
+					return 1;
+				}
 
 				uint64_t block_process_time_full = 0, transactions_process_time_full = 0;
 				size_t num_txs = 0;
@@ -1230,12 +1239,13 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 					{
 						if(tvc[i].m_verifivation_failed)
 						{
+							drop_connections(span_origin);
 							if(!m_p2p->for_connection(span_connection_id, [&](cryptonote_connection_context &context, nodetool::peerid_type peer_id, uint32_t f) -> bool {
-								   GULPSF_LOG_ERROR("{} transaction verification failed on NOTIFY_RESPONSE_GET_OBJECTS, tx_id = {}, dropping connection", context_str, epee::string_tools::pod_to_hex(get_blob_hash(*it)) );
-								   drop_connection(context, false, true);
-								   return 1;
-							   }))
-								GULPS_ERROR( context_str, " span connection id not found");
+									GULPSF_LOG_ERROR("{} transaction verification failed on NOTIFY_RESPONSE_GET_OBJECTS, tx_id = {}, dropping connection", context_str, epee::string_tools::pod_to_hex(get_blob_hash(*it)) );
+									drop_connection(context, false, true);
+									return 1;
+							}))
+							GULPS_ERROR( context_str, " span connection id not found");
 
 							if(!m_core.cleanup_handle_incoming_blocks())
 							{
@@ -1259,12 +1269,13 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 
 					if(bvc.m_verifivation_failed)
 					{
+						drop_connections(span_origin);
 						if(!m_p2p->for_connection(span_connection_id, [&](cryptonote_connection_context &context, nodetool::peerid_type peer_id, uint32_t f) -> bool {
 							   GULPS_INFO( context_str, " Block verification failed, dropping connection");
 								drop_connection_with_score(context, bvc.m_bad_pow ? P2P_IP_FAILS_BEFORE_BLOCK : 1, true);
 							   return 1;
-						   }))
-							GULPS_ERROR( context_str, " span connection id not found");
+						}))
+						GULPS_ERROR( context_str, " span connection id not found");
 
 						if(!m_core.cleanup_handle_incoming_blocks())
 						{
@@ -1278,6 +1289,7 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 					}
 					if(bvc.m_marked_as_orphaned)
 					{
+						drop_connections(span_origin);
 						if(!m_p2p->for_connection(span_connection_id, [&](cryptonote_connection_context &context, nodetool::peerid_type peer_id, uint32_t f) -> bool {
 								GULPS_INFO( context_str, " Block received at sync phase was marked as orphaned, dropping connection");
 								drop_connection(context, true, true);
@@ -2049,8 +2061,7 @@ int t_cryptonote_protocol_handler<t_core>::handle_response_chain_entry(int comma
 			else
 				expect_unknown = true;
 		}
-		const uint64_t block_weight = arg.m_block_weights.empty() ? 0 : arg.m_block_weights[i];
-		context.m_needed_objects.push_back(std::make_pair(arg.m_block_ids[i], block_weight));
+		context.m_needed_objects.push_back(arg.m_block_ids[i]);
 		if (++added == n_use_blocks)
 			break;
 		first = false;
@@ -2139,9 +2150,6 @@ std::string t_cryptonote_protocol_handler<t_core>::get_peers_overview() const
 	std::stringstream ss;
 	const boost::posix_time::ptime now = boost::posix_time::microsec_clock::universal_time();
 	m_p2p->for_each_connection([&](const connection_context &ctx, nodetool::peerid_type peer_id, uint32_t support_flags) {
-		const uint32_t stripe = tools::get_pruning_stripe(ctx.m_pruning_seed);
-		char state_char = cryptonote::get_protocol_state_char(ctx.m_state);
-		ss << stripe + state_char;
 		if (ctx.m_last_request_time != boost::date_time::not_a_date_time)
 			ss << (((now - ctx.m_last_request_time).total_microseconds() > IDLE_PEER_KICK_TIME) ? "!" : "?");
 		ss <<  + " ";
@@ -2169,6 +2177,29 @@ template <class t_core>
 void t_cryptonote_protocol_handler<t_core>::drop_connection(cryptonote_connection_context &context, bool add_fail, bool flush_all_spans)
 {
 	return drop_connection_with_score(context, add_fail ? 1 : 0, flush_all_spans);
+}
+//------------------------------------------------------------------------------------------------------------------------
+template<class t_core>
+void t_cryptonote_protocol_handler<t_core>::drop_connections(const epee::net_utils::network_address address)
+{
+	GULPSF_INFO("dropping connections to {}", address.str());
+
+	m_p2p->add_host_fail(address, 5);
+
+	std::vector<boost::uuids::uuid> drop;
+	m_p2p->for_each_connection([&](const connection_context& cntxt, nodetool::peerid_type peer_id, uint32_t support_flags) {
+		if (address.is_same_host(cntxt.m_remote_address))
+			drop.push_back(cntxt.m_connection_id);
+		return true;
+	});
+	for (const boost::uuids::uuid &id: drop)
+	{
+		m_block_queue.flush_spans(id, true);
+		m_p2p->for_connection(id, [&](cryptonote_connection_context& context, nodetool::peerid_type peer_id, uint32_t f)->bool{
+			drop_connection(context, true, false);
+			return true;
+		});
+	}
 }
 //------------------------------------------------------------------------------------------------------------------------
 template <class t_core>

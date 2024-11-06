@@ -502,6 +502,13 @@ class core : public i_miner_handler
       */
 	size_t get_pool_transactions_count() const;
 
+     /**
+      * @copydoc Blockchain::get_total_transactions
+      *
+      * @note see Blockchain::get_total_transactions
+      */
+     size_t get_blockchain_total_transactions() const;
+
 	/**
       * @copydoc Blockchain::have_block
       *
@@ -509,13 +516,6 @@ class core : public i_miner_handler
       */
       bool have_block_unlocked(const crypto::hash& id, int *where = NULL) const;
       bool have_block(const crypto::hash& id, int *where = NULL) const;
-
-	/**
-      * @copydoc Blockchain::have_block
-      *
-      * @note see Blockchain::have_block
-      */
-	bool have_block(const crypto::hash &id) const;
 
 	/**
       * @copydoc Blockchain::get_short_chain_history

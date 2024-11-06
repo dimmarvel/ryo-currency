@@ -58,7 +58,7 @@ struct cryptonote_connection_context : public epee::net_utils::connection_contex
 {
 	cryptonote_connection_context() : m_state(state_before_handshake), m_remote_blockchain_height(0), m_last_response_height(0),
 		m_last_request_time(boost::posix_time::microsec_clock::universal_time()), m_callback_request_count(0), m_last_known_hash(crypto::null_hash),
-		m_expect_response(0), m_expect_height(0), m_num_requested(0)  {}
+		m_score(0), m_expect_response(0), m_expect_height(0), m_num_requested(0)  {}
 
 	enum state
 	{
@@ -76,12 +76,12 @@ struct cryptonote_connection_context : public epee::net_utils::connection_contex
 	uint64_t m_last_response_height;
 	boost::posix_time::ptime m_last_request_time;
 	epee::copyable_atomic m_callback_request_count; //in debug purpose: problem with double callback rise
+	int32_t m_score;
 	crypto::hash m_last_known_hash;
 	int m_expect_response;
 	uint64_t m_expect_height;
 	size_t m_num_requested;
 	epee::copyable_atomic m_idle_peer_notification{0};
-	//size_t m_score;  TODO: add score calculations
 };
 
 inline std::string get_protocol_state_string(cryptonote_connection_context::state s)

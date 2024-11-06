@@ -1222,9 +1222,9 @@ size_t core::get_pool_transactions_count() const
 	return m_mempool.get_transactions_count();
 }
 //-----------------------------------------------------------------------------------------------
-bool core::have_block(const crypto::hash &id) const
+bool core::have_block(const crypto::hash &id, int *where) const
 {
-	return m_blockchain_storage.have_block(id);
+	return m_blockchain_storage.have_block(id, where);
 }
 //-----------------------------------------------------------------------------------------------
 bool core::parse_tx_from_blob(transaction &tx, crypto::hash &tx_hash, crypto::hash &tx_prefix_hash, const blobdata &blob) const
