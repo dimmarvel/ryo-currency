@@ -258,6 +258,8 @@ class core_rpc_server : public epee::http_server_impl_base<core_rpc_server>
 	bool m_restricted;
 	epee::critical_section m_host_fails_score_lock;
 	std::map<std::string, uint64_t> m_host_fails_score;
+	bool disable_rpc_ban;
+
 };
 }
 

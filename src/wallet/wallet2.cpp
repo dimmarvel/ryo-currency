@@ -1117,7 +1117,7 @@ void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote
 		int num_vouts_received = 0;
 
 		tools::threadpool &tpool = tools::threadpool::getInstance();
-		tools::threadpool::waiter waiter;
+		tools::threadpool::waiter waiter(tpool);
 		const cryptonote::account_keys &keys = m_account.get_keys();
 		crypto::key_derivation derivation;
 

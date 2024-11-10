@@ -227,7 +227,13 @@ bool block_queue::requested(const crypto::hash &hash) const
 	return requested_internal(hash);
 }
 
-std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_height, uint64_t last_block_height, uint64_t max_blocks, const boost::uuids::uuid &connection_id, const epee::net_utils::network_address &addr, uint64_t blockchain_height, const std::vector<std::pair<crypto::hash, uint64_t>> &block_hashes, boost::posix_time::ptime time)
+bool block_queue::have(const crypto::hash &hash) const
+{
+	boost::unique_lock<boost::recursive_mutex> lock(mutex);
+	return have_blocks.find(hash) != have_blocks.end();
+}
+
+std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_height, uint64_t last_block_height, uint64_t max_blocks, const boost::uuids::uuid &connection_id, const epee::net_utils::network_address &addr, uint64_t blockchain_height, const std::vector<crypto::hash> &block_hashes, boost::posix_time::ptime time)
 {
 	boost::unique_lock<boost::recursive_mutex> lock(mutex);
 
@@ -249,7 +255,7 @@ std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_hei
 	// skip everything we've already requested
 	uint64_t span_start_height = last_block_height - block_hashes.size() + 1;
 	auto i = block_hashes.begin();
-	while (i != block_hashes.end() && requested_internal((*i).first))
+	while (i != block_hashes.end() && requested_internal((*i)))
 	{
 		++i;
 		++span_start_height;
@@ -263,7 +269,7 @@ std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_hei
 	}
 
 	i = block_hashes.begin() + span_start_height - block_hashes_start_height;
-	while (i != block_hashes.end() && requested_internal((*i).first))
+	while (i != block_hashes.end() && requested_internal((*i)))
 	{
 		++i;
 		++span_start_height;
@@ -274,7 +280,7 @@ std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_hei
 
 	while (i != block_hashes.end() && span_length < max_blocks)
 	{
-		hashes.push_back((*i).first);
+		hashes.push_back((*i));
 		++i;
 		++span_length;
 	}
@@ -306,6 +312,16 @@ std::pair<uint64_t, uint64_t> block_queue::get_next_span_if_scheduled(std::vecto
 	connection_id = i->connection_id;
 	time = i->time;
 	return std::make_pair(i->start_block_height, i->nblocks);
+}
+
+void block_queue::reset_next_span_time(boost::posix_time::ptime t)
+{
+	boost::unique_lock<boost::recursive_mutex> lock(mutex);
+	GULPS_CHECK_AND_ASSERT_THROW_MES(!blocks.empty(), "No next span to reset time");
+	block_map::iterator i = blocks.begin();
+	GULPS_CHECK_AND_ASSERT_THROW_MES(i != blocks.end(), "No next span to reset time");
+	GULPS_CHECK_AND_ASSERT_THROW_MES(i->blocks.empty(), "Next span is not empty");
+	(boost::posix_time::ptime&)i->time = t; // sod off, time doesn't influence sorting
 }
 
 void block_queue::set_span_hashes(uint64_t start_height, const boost::uuids::uuid &connection_id, std::vector<crypto::hash> hashes)

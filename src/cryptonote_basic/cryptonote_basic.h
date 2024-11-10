@@ -432,6 +432,7 @@ struct block : public block_header
 	void invalidate_hashes() { set_hash_valid(false); }
 	bool is_hash_valid() const { return hash_valid.load(std::memory_order_acquire); }
 	void set_hash_valid(bool v) const { hash_valid.store(v, std::memory_order_release); }
+	void set_hash(const crypto::hash &h) const { hash = h; set_hash_valid(true); }
 
 	transaction miner_tx;
 	std::vector<crypto::hash> tx_hashes;

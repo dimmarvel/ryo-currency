@@ -93,6 +93,10 @@ class test_core
 	bool fluffy_blocks_enabled() const { return false; }
 	uint64_t prevalidate_block_hashes(uint64_t height, const std::vector<crypto::hash> &hashes) { return 0; }
 	void stop() {}
+	bool update_checkpoints() { return true; }
+	bool have_block_unlocked(const crypto::hash& id, int *where = NULL) const { return true; }
+	crypto::hash get_block_id_by_height(uint64_t height) const { return {}; }
+	uint64_t get_earliest_ideal_height_for_version(uint8_t version) const { return 0; }
 };
 
 typedef nodetool::node_server<cryptonote::t_cryptonote_protocol_handler<test_core>> Server;

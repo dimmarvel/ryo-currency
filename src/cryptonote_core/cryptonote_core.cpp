@@ -652,7 +652,8 @@ bool core::handle_incoming_txs(const std::vector<blobdata> &tx_blobs, std::vecto
 	std::vector<result> results(tx_blobs.size());
 
 	tvc.resize(tx_blobs.size());
-	tools::threadpool::waiter waiter;
+	tools::threadpool& tpool = tools::threadpool::getInstance();
+	tools::threadpool::waiter waiter(tpool);
 	std::vector<blobdata>::const_iterator it = tx_blobs.begin();
 	for(size_t i = 0; i < tx_blobs.size(); i++, ++it)
 	{
@@ -1086,7 +1087,13 @@ bool core::handle_block_found(block &b)
 		m_miner.resume();
 		return false;
 	}
-	prepare_handle_incoming_blocks(blocks);
+	std::vector<block> pblocks;
+	if (!prepare_handle_incoming_blocks(blocks))
+	{
+		GULPS_ERROR("Block found, but failed to prepare to add");
+		m_miner.resume();
+		return false;
+	}
 	m_blockchain_storage.add_new_block(b, bvc);
 	cleanup_handle_incoming_blocks(true);
 	//anyway - update miner template
@@ -1107,8 +1114,8 @@ bool core::handle_block_found(block &b)
 			GULPS_LOG_L1("Block found but, seems that reorganize just happened after that, do not relay this block");
 			return true;
 		}
-		GULPS_CHECK_AND_ASSERT_MES(txs.size() == b.tx_hashes.size() && !missed_txs.size(), false, "can't find some transactions in found block:" , get_block_hash(b) , " txs.size()=" , txs.size()
-																																		   , ", b.tx_hashes.size()=" , b.tx_hashes.size() , ", missed_txs.size()" , missed_txs.size());
+		GULPS_CHECK_AND_ASSERT_MES(txs.size() == b.tx_hashes.size() && !missed_txs.size(), false, "can't find some transactions in found block:" , get_block_hash(b) , " txs.size()=" , txs.size(),
+			", b.tx_hashes.size()=" , b.tx_hashes.size() , ", missed_txs.size()" , missed_txs.size());
 
 		block_to_blob(b, arg.b.block);
 		//pack transactions
@@ -1136,10 +1143,14 @@ bool core::add_new_block(const block &b, block_verification_context &bvc)
 }
 
 //-----------------------------------------------------------------------------------------------
-bool core::prepare_handle_incoming_blocks(const std::vector<block_complete_entry> &blocks)
+bool core::prepare_handle_incoming_blocks(const std::vector<block_complete_entry> &blocks_entry)
 {
 	m_incoming_tx_lock.lock();
-	m_blockchain_storage.prepare_handle_incoming_blocks(blocks);
+	if (!m_blockchain_storage.prepare_handle_incoming_blocks(blocks_entry))
+	{
+		cleanup_handle_incoming_blocks(false);
+		return false;
+	}
 	return true;
 }
 

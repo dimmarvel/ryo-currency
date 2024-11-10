@@ -173,6 +173,7 @@ class t_cryptonote_protocol_handler : public i_cryptonote_protocol, cryptonote_p
 	epee::math_helper::once_a_time_seconds<30> m_idle_peer_kicker;
 	tools::PerformanceTimer m_sync_timer, m_add_timer;
 	uint64_t m_last_add_end_time;
+    uint64_t m_sync_spans_downloaded, m_sync_old_spans_downloaded, m_sync_bad_spans_downloaded;
 	uint64_t m_sync_download_chain_size, m_sync_download_objects_size;
 	size_t m_block_download_max_size;
 

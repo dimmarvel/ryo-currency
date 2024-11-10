@@ -105,6 +105,9 @@ bool t_cryptonote_protocol_handler<t_core>::init(const boost::program_options::v
     m_add_timer.pause();
     m_add_timer.reset();
     m_last_add_end_time = 0;
+    m_sync_spans_downloaded = 0;
+    m_sync_old_spans_downloaded = 0;
+    m_sync_bad_spans_downloaded = 0;
     m_sync_download_chain_size = 0;
 	m_sync_download_objects_size = 0;
     m_block_download_max_size = command_line::get_arg(vm, arg_block_download_max_size);
@@ -366,8 +369,8 @@ bool t_cryptonote_protocol_handler<t_core>::process_payload_sync_data(const CORE
 	if(hshd.current_height > target)
 	{
 		/* As I don't know if accessing hshd from core could be a good practice,
-    I prefer pushing target height to the core at the same time it is pushed to the user.
-    Nz. */
+		I prefer pushing target height to the core at the same time it is pushed to the user.
+		Nz. */
 		m_core.set_target_blockchain_height((hshd.current_height));
 		int64_t diff = static_cast<int64_t>(hshd.current_height) - static_cast<int64_t>(m_core.get_current_blockchain_height());
 		uint64_t abs_diff = std::abs(diff);
@@ -392,6 +395,9 @@ bool t_cryptonote_protocol_handler<t_core>::process_payload_sync_data(const CORE
 			m_add_timer.pause();
 			m_add_timer.reset();
 			m_last_add_end_time = 0;
+			m_sync_spans_downloaded = 0;
+			m_sync_old_spans_downloaded = 0;
+			m_sync_bad_spans_downloaded = 0;
 			m_sync_download_chain_size = 0;
 			m_sync_download_objects_size = 0;
 		}
@@ -439,7 +445,14 @@ int t_cryptonote_protocol_handler<t_core>::handle_notify_new_block(int command, 
 	m_core.pause_mine();
 	std::vector<block_complete_entry> blocks;
 	blocks.push_back(arg.b);
-	m_core.prepare_handle_incoming_blocks(blocks);
+	std::vector<block> pblocks;
+	if (!m_core.prepare_handle_incoming_blocks(blocks))
+	{
+		GULPS_INFO("Block verification failed: prepare_handle_incoming_blocks failed, dropping connection");
+		drop_connection(context, false, false);
+		m_core.resume_mine();
+		return 1;
+	}
 	for(auto tx_blob_it = arg.b.txs.begin(); tx_blob_it != arg.b.txs.end(); tx_blob_it++)
 	{
 		cryptonote::tx_verification_context tvc = AUTO_VAL_INIT(tvc);
@@ -697,7 +710,13 @@ int t_cryptonote_protocol_handler<t_core>::handle_notify_new_fluffy_block(int co
 
 			std::vector<block_complete_entry> blocks;
 			blocks.push_back(b);
-			m_core.prepare_handle_incoming_blocks(blocks);
+			std::vector<block> pblocks;
+			if (!m_core.prepare_handle_incoming_blocks(blocks))
+			{
+				GULPS_PRINT( context_str, "Failure in prepare_handle_incoming_blocks");
+				m_core.resume_mine();
+				return 1;
+			}
 
 			block_verification_context bvc = boost::value_initialized<block_verification_context>();
 			m_core.handle_incoming_block(arg.b.block, bvc); // got block from handle_notify_new_block
@@ -935,21 +954,31 @@ int t_cryptonote_protocol_handler<t_core>::handle_response_get_objects(int comma
 		CRITICAL_REGION_LOCAL(m_buffer_mutex);
 		m_avg_buffer.push_back(size);
 	}
+    ++m_sync_spans_downloaded;
     m_sync_download_objects_size += size;
 	GULPSF_LOG_L1("{} downloaded {} bytes worth of blocks", context_str, size);
 
+	if(arg.blocks.empty())
+	{
+		GULPS_LOG_ERROR("sent wrong NOTIFY_HAVE_OBJECTS: no blocks");
+		drop_connection(context, true, false);
+		++m_sync_bad_spans_downloaded;
+		return 1;
+	}
+
 	/*using namespace boost::chrono;
-      auto point = steady_clock::now();
-      auto time_from_epoh = point.time_since_epoch();
-      auto sec = duration_cast< seconds >( time_from_epoh ).count();*/
+	auto point = steady_clock::now();
+	auto time_from_epoh = point.time_since_epoch();
+	auto sec = duration_cast< seconds >( time_from_epoh ).count();*/
 
 	//epee::net_utils::network_throttle_manager::get_global_throttle_inreq().logger_handle_net("log/dr-monero/net/req-all.data", sec, get_avg_block_size());
 
 	if(context.m_last_response_height > arg.current_blockchain_height)
 	{
-		GULPSF_LOG_ERROR("{} sent wrong NOTIFY_HAVE_OBJECTS: arg.m_current_blockchain_height={} < m_last_response_height={}, dropping connection", context_str, arg.current_blockchain_height
-																							  , context.m_last_response_height );
+		GULPSF_LOG_ERROR("{} sent wrong NOTIFY_HAVE_OBJECTS: arg.m_current_blockchain_height={} < m_last_response_height={}, dropping connection", 
+			context_str, arg.current_blockchain_height, context.m_last_response_height );
 		drop_connection(context, false, false);
+		++m_sync_bad_spans_downloaded;
 		return 1;
 	}
 
@@ -979,32 +1008,44 @@ int t_cryptonote_protocol_handler<t_core>::handle_response_get_objects(int comma
 		{
 			GULPSF_LOG_ERROR("{} sent wrong block: failed to parse and validate block: {}, dropping connection", context_str, epee::string_tools::buff_to_hex_nodelimer(block_entry.block) );
 			drop_connection(context, false, false);
+			++m_sync_bad_spans_downloaded;
 			return 1;
 		}
 		if(b.miner_tx.vin.size() != 1 || b.miner_tx.vin.front().type() != typeid(txin_gen))
 		{
 			GULPSF_LOG_ERROR("{} sent wrong block: block: miner tx does not have exactly one txin_gen input{}, dropping connection", context_str, epee::string_tools::buff_to_hex_nodelimer(block_entry.block) );
 			drop_connection(context, false, false);
+			++m_sync_bad_spans_downloaded;
 			return 1;
 		}
 		if(start_height == std::numeric_limits<uint64_t>::max())
+		{
 			start_height = boost::get<txin_gen>(b.miner_tx.vin[0]).height;
+			if (start_height > context.m_expect_height)
+			{
+				GULPS_LOG_ERROR("sent block ahead of expected height, dropping connection");
+				drop_connection(context, false, false);
+				++m_sync_bad_spans_downloaded;
+				return 1;
+			}
+		}
 
 		const crypto::hash block_hash = get_block_hash(b);
 		auto req_it = context.m_requested_objects.find(block_hash);
 		if(req_it == context.m_requested_objects.end())
 		{
-			GULPSF_LOG_ERROR("{} sent wrong NOTIFY_RESPONSE_GET_OBJECTS: block with id={} wasn't requested, dropping connection", context_str, epee::string_tools::pod_to_hex(get_blob_hash(block_entry.block))
-																						);
+			GULPSF_LOG_ERROR("{} sent wrong NOTIFY_RESPONSE_GET_OBJECTS: block with id={} wasn't requested, dropping connection",
+				context_str, epee::string_tools::pod_to_hex(get_blob_hash(block_entry.block)));
 			drop_connection(context, false, false);
+			++m_sync_bad_spans_downloaded;
 			return 1;
 		}
 		if(b.tx_hashes.size() != block_entry.txs.size())
 		{
 			GULPSF_LOG_ERROR("{} sent wrong NOTIFY_RESPONSE_GET_OBJECTS: block with id={}, tx_hashes.size()={} mismatch with block_complete_entry.m_txs.size()={}, dropping connection"
-													, context_str, epee::string_tools::pod_to_hex(get_blob_hash(block_entry.block))
-													, b.tx_hashes.size() , block_entry.txs.size());
+				, context_str, epee::string_tools::pod_to_hex(get_blob_hash(block_entry.block)), b.tx_hashes.size() , block_entry.txs.size());
 			drop_connection(context, false, false);
+			++m_sync_bad_spans_downloaded;
 			return 1;
 		}
 
@@ -1016,6 +1057,7 @@ int t_cryptonote_protocol_handler<t_core>::handle_response_get_objects(int comma
 	{
 		GULPSF_LOG_L1("returned not all requested objects (context.m_requested_objects.size()={}), dropping connection", context.m_requested_objects.size() );
 		drop_connection(context, false, false);
+		++m_sync_bad_spans_downloaded;
 		return 1;
 	}
 
@@ -1026,6 +1068,7 @@ int t_cryptonote_protocol_handler<t_core>::handle_response_get_objects(int comma
 		const uint64_t subchain_height = start_height + arg.blocks.size();
 		GULPSF_LOG_L1("{} These are old blocks, ignoring: blocks {} - {}, blockchain height {}", context_str, start_height , (subchain_height - 1) , m_core.get_current_blockchain_height());
 		m_block_queue.remove_spans(context.m_connection_id, start_height);
+		++m_sync_old_spans_downloaded;
 		goto skip;
 	}
 
@@ -1034,7 +1077,7 @@ int t_cryptonote_protocol_handler<t_core>::handle_response_get_objects(int comma
 			context_str, __FUNCTION__, arg.blocks.size(), start_height, (start_height + arg.blocks.size() - 1));
 
 		// add that new span to the block queue
-		const boost::posix_time::time_duration dt = now - context.m_last_request_time;
+		const boost::posix_time::time_duration dt = now - request_time;
 		const float rate = size * 1e6 / (dt.total_microseconds() + 1);
 		GULPSF_LOG_L1("{} adding span: {} at height {}, {} seconds, {} kB/s, size now {} MB", context_str, arg.blocks.size() , start_height , dt.total_microseconds() / 1e6 , (rate / 1e3) , (m_block_queue.get_data_size() + blocks_size) / 1048576.f );
 		m_block_queue.add_blocks(start_height, arg.blocks, context.m_connection_id, context.m_remote_address, rate, blocks_size);
@@ -1199,8 +1242,7 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 				}
 
 				std::vector<block> pblocks;
-				m_core.prepare_handle_incoming_blocks(blocks);
-				if (!m_core.prepare_handle_incoming_blocks(blocks, pblocks))
+				if (!m_core.prepare_handle_incoming_blocks(blocks))
 				{
 					GULPS_ERROR("Failure in prepare_handle_incoming_blocks");
 					drop_connections(span_origin);
@@ -1513,18 +1555,18 @@ size_t t_cryptonote_protocol_handler<t_core>::skip_unneeded_hashes(cryptonote_co
 {
 	// take out blocks we already have
 	size_t skip = 0;
-	while (skip < context.m_needed_objects.size() && (m_core.have_block(context.m_needed_objects[skip].first) || (check_block_queue && m_block_queue.have(context.m_needed_objects[skip].first))))
+	while (skip < context.m_needed_objects.size() && (m_core.have_block(context.m_needed_objects[skip]) || (check_block_queue && m_block_queue.have(context.m_needed_objects[skip]))))
 	{
 		// if we're popping the last hash, record it so we can ask again from that hash,
 		// this prevents never being able to progress on peers we get old hash lists from
 		if (skip + 1 == context.m_needed_objects.size())
-			context.m_last_known_hash = context.m_needed_objects[skip].first;
+			context.m_last_known_hash = context.m_needed_objects[skip];
 		++skip;
 	}
 	if (skip > 0)
 	{
 		GULPSF_LOG_L1("{} skipping {}/{} blocks", context_str, skip, context.m_needed_objects.size());
-		context.m_needed_objects = std::vector<std::pair<crypto::hash, uint64_t>>(context.m_needed_objects.begin() + skip, context.m_needed_objects.end());
+		context.m_needed_objects = std::vector<crypto::hash>(context.m_needed_objects.begin() + skip, context.m_needed_objects.end());
 	}
 	return skip;
 }
@@ -1565,12 +1607,6 @@ bool t_cryptonote_protocol_handler<t_core>::request_missing_objects(cryptonote_c
 				on_connection_synchronized();
 			return true;
 		}
-		uint64_t next_needed_height = m_block_queue.get_next_needed_height(bc_height);
-		uint64_t next_block_height;
-		if (context.m_needed_objects.empty())
-			next_block_height = next_needed_height;
-		else
-			next_block_height = context.m_last_response_height - context.m_needed_objects.size() + 1;
 		bool proceed = queue_proceed;
 		GULPS_LOG_L1("last_response_height=", context.m_last_response_height, ", m_needed_objects size=", context.m_needed_objects.size());
 
@@ -1634,8 +1670,6 @@ bool t_cryptonote_protocol_handler<t_core>::request_missing_objects(cryptonote_c
 		{
 			if (!queue_proceed)
 				GULPS_LOG_L1(context_str, "Block queue is ", nspans, " and ", size, ", pausing");
-			else if (!stripe_proceed_main && !stripe_proceed_secondary)
-				GULPS_LOG_L1(context_str, "We do not have the stripe required to download another block, pausing");
 			context.m_state = cryptonote_connection_context::state_standby;
 			GULPS_LOG_L1("pausing");
 		}
@@ -1727,9 +1761,9 @@ bool t_cryptonote_protocol_handler<t_core>::request_missing_objects(cryptonote_c
 					context.m_requested_objects.insert(hash);
 					// that's atrocious O(n) wise, but this is rare
 					auto i = std::find_if(context.m_needed_objects.begin(), context.m_needed_objects.end(),
-						[&hash](const std::pair<crypto::hash, uint64_t> &o) { return o.first == hash; });
+						[&hash](const crypto::hash &o) { return o == hash; });
 					if (i != context.m_needed_objects.end())
-					context.m_needed_objects.erase(i);
+						context.m_needed_objects.erase(i);
 				}
 			}
 		}
@@ -1746,7 +1780,7 @@ bool t_cryptonote_protocol_handler<t_core>::request_missing_objects(cryptonote_c
 					return false;
 				}
 				if (skip > 0)
-					context.m_needed_objects = std::vector<std::pair<crypto::hash, uint64_t>>(context.m_needed_objects.begin() + skip, context.m_needed_objects.end());
+					context.m_needed_objects = std::vector<crypto::hash>(context.m_needed_objects.begin() + skip, context.m_needed_objects.end());
 				if (context.m_needed_objects.size() < span.second)
 				{
 					GULPS_LOG_ERROR("ERROR: span {} / {} , m_needed_objects {}", span.first, span.second, context.m_needed_objects.size());
@@ -1756,11 +1790,11 @@ bool t_cryptonote_protocol_handler<t_core>::request_missing_objects(cryptonote_c
 				req.blocks.reserve(req.blocks.size() + span.second);
 				for (size_t n = 0; n < span.second; ++n)
 				{
-					req.blocks.push_back(context.m_needed_objects[n].first);
+					req.blocks.push_back(context.m_needed_objects[n]);
 					++count;
-					context.m_requested_objects.insert(context.m_needed_objects[n].first);
+					context.m_requested_objects.insert(context.m_needed_objects[n]);
 				}
-				context.m_needed_objects = std::vector<std::pair<crypto::hash, uint64_t>>(context.m_needed_objects.begin() + span.second, context.m_needed_objects.end());
+				context.m_needed_objects = std::vector<crypto::hash>(context.m_needed_objects.begin() + span.second, context.m_needed_objects.end());
 			}
 
 			context.m_last_request_time = boost::posix_time::microsec_clock::universal_time();
@@ -1879,9 +1913,10 @@ template <class t_core>
 bool t_cryptonote_protocol_handler<t_core>::on_connection_synchronized()
 {
 	bool val_expected = false;
+	uint64_t current_blockchain_height = m_core.get_current_blockchain_height();
 	if(m_synchronized.compare_exchange_strong(val_expected, true))
 	{
-		if ((current_blockchain_height > m_sync_start_height))
+		if ((current_blockchain_height > m_sync_start_height) && (m_sync_spans_downloaded > 0))
 		{
 			uint64_t synced_blocks = current_blockchain_height - m_sync_start_height;
 			// Report only after syncing an "interesting" number of blocks:
@@ -1911,7 +1946,9 @@ bool t_cryptonote_protocol_handler<t_core>::on_connection_synchronized()
 				"sync-info", "Sync time: ", sync_time/1e9/60, " min, idle time ",
 				(100.f * (1.0f - add_time / (float)sync_time)), "%", ", ",
 				(10 * m_sync_download_objects_size / 1024 / 1024) / 10.f, " + ",
-				(10 * m_sync_download_chain_size / 1024 / 1024) / 10.f, " MB downloaded.");
+				(10 * m_sync_download_chain_size / 1024 / 1024) / 10.f, " MB downloaded.",
+				100.0f * m_sync_old_spans_downloaded / m_sync_spans_downloaded, "% old spans, ",
+				100.0f * m_sync_bad_spans_downloaded / m_sync_spans_downloaded, "% bad spans");
 		}
 		m_core.on_synchronized();
 	}
@@ -1996,8 +2033,8 @@ int t_cryptonote_protocol_handler<t_core>::handle_response_chain_entry(int comma
 
 	context.m_needed_objects.clear();
 	context.m_needed_objects.reserve(arg.m_block_ids.size());
-	uint64_t added = 0;
 	std::unordered_set<crypto::hash> blocks_found;
+	uint64_t added = 0;
 	bool first = true;
 	bool expect_unknown = false;
 	for (size_t i = 0; i < arg.m_block_ids.size(); ++i)
@@ -2062,7 +2099,7 @@ int t_cryptonote_protocol_handler<t_core>::handle_response_chain_entry(int comma
 				expect_unknown = true;
 		}
 		context.m_needed_objects.push_back(arg.m_block_ids[i]);
-		if (++added == n_use_blocks)
+		if(++added == n_use_blocks)
 			break;
 		first = false;
 	}
@@ -2161,9 +2198,8 @@ std::string t_cryptonote_protocol_handler<t_core>::get_peers_overview() const
 template<class t_core>
 void t_cryptonote_protocol_handler<t_core>::drop_connection_with_score(cryptonote_connection_context &context, unsigned score, bool flush_all_spans)
 {
-	GULPSF_LOG_L1("{}dropping connection id {} (pruning seed P{}), score {}, flush_all_spans {}",
-		context_str, context.m_connection_id, epee::string_tools::to_string_hex(context.m_pruning_seed),
-		score, flush_all_spans);
+	GULPSF_LOG_L1("{} dropping connection id {}, score {}, flush_all_spans {}",
+		context_str, boost::uuids::to_string(context.m_connection_id), score, flush_all_spans);
 
 	if (score > 0)
 		m_p2p->add_host_fail(context.m_remote_address, score);

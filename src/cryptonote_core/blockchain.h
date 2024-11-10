@@ -232,7 +232,7 @@ class Blockchain
      *
      * @return false on erroneous blocks, else true
      */
-	bool prepare_handle_incoming_blocks(const std::vector<block_complete_entry> &blocks);
+     bool prepare_handle_incoming_blocks(const std::vector<block_complete_entry>  &blocks_entry);
 
 	/**
      * @brief incoming blocks post-processing, cleanup, and disk sync
@@ -690,8 +690,7 @@ class Blockchain
      *
      * @return false if an unexpected exception occurs, else true
      */
-	template <class t_ids_container, class t_tx_container, class t_missed_container>
-	bool get_transactions_blobs(const t_ids_container &txs_ids, t_tx_container &txs, t_missed_container &missed_txs) const;
+     bool get_transactions_blobs(const std::vector<crypto::hash>& txs_ids, std::vector<cryptonote::blobdata>& txs, std::vector<crypto::hash>& missed_txs) const;
 	template <class t_ids_container, class t_tx_container, class t_missed_container>
 	bool get_transactions(const t_ids_container &txs_ids, t_tx_container &txs, t_missed_container &missed_txs) const;
 
@@ -1052,6 +1051,11 @@ class Blockchain
 	bool m_offline;
 
 	std::atomic<bool> m_cancel;
+
+	// for prepare_handle_incoming_blocks
+	uint64_t m_prepare_height;
+	uint64_t m_prepare_nblocks;
+	std::vector<block> *m_prepare_blocks;
 
 	/**
      * @brief collects the keys for all outputs being "spent" as an input

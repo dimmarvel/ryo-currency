@@ -148,7 +148,7 @@ class node_server : public epee::levin::levin_commands_handler<p2p_connection_co
 	peerlist_manager &get_peerlist_manager() { return m_peerlist; }
 	void delete_out_connections(size_t count);
 	void delete_in_connections(size_t count);
-	virtual bool block_host(const epee::net_utils::network_address &adress, time_t seconds = P2P_IP_BLOCKTIME);
+	virtual bool block_host(const epee::net_utils::network_address &adress, time_t seconds = P2P_IP_BLOCKTIME, bool add_only = false);
 	virtual bool unblock_host(const epee::net_utils::network_address &address);
 	virtual std::map<std::string, time_t> get_blocked_hosts()
 	{
@@ -224,7 +224,7 @@ class node_server : public epee::levin::levin_commands_handler<p2p_connection_co
 	virtual void request_callback(const epee::net_utils::connection_context_base &context);
 	virtual void for_each_connection(std::function<bool(typename t_payload_net_handler::connection_context &, peerid_type, uint32_t)> f);
 	virtual bool for_connection(const boost::uuids::uuid &, std::function<bool(typename t_payload_net_handler::connection_context &, peerid_type, uint32_t)> f);
-	virtual bool add_host_fail(const epee::net_utils::network_address &address);
+	virtual bool add_host_fail(const epee::net_utils::network_address &address, unsigned int score = 1);
 	//----------------- i_connection_filter  --------------------------------------------------------
 	virtual bool is_remote_host_allowed(const epee::net_utils::network_address &address);
 	//-----------------------------------------------------------------------------------------------
@@ -361,7 +361,6 @@ class node_server : public epee::levin::levin_commands_handler<p2p_connection_co
 
 	epee::critical_section m_host_fails_score_lock;
 	std::map<std::string, uint64_t> m_host_fails_score;
-	bool disable_rpc_ban;
 
 	cryptonote::network_type m_nettype;
 };

@@ -204,8 +204,18 @@ int check_flush(cryptonote::core &core, std::vector<block_complete_entry> &block
 	}
 	core.prevalidate_block_hashes(core.get_blockchain_storage().get_db().height(), hashes);
 
-	core.prepare_handle_incoming_blocks(blocks);
-
+	std::vector<block> pblocks;
+	if (!core.prepare_handle_incoming_blocks(blocks))
+	{
+		GULPS_ERROR("Failed to prepare to add blocks");
+		return 1;
+	}
+	if (!pblocks.empty() && pblocks.size() != blocks.size())
+	{
+		GULPS_ERROR("Unexpected parsed blocks size");
+		core.cleanup_handle_incoming_blocks();
+		return 1;
+	}
 	for(const block_complete_entry &block_entry : blocks)
 	{
 		// process transactions

@@ -2270,8 +2270,7 @@ bool Blockchain::get_blocks(const t_ids_container &block_ids, t_blocks_container
 //------------------------------------------------------------------
 //TODO: return type should be void, throw on exception
 //       alternatively, return true only if no transactions missed
-template <class t_ids_container, class t_tx_container, class t_missed_container>
-bool Blockchain::get_transactions_blobs(const t_ids_container &txs_ids, t_tx_container &txs, t_missed_container &missed_txs) const
+bool Blockchain::get_transactions_blobs(const std::vector<crypto::hash>& txs_ids, std::vector<cryptonote::blobdata>& txs, std::vector<crypto::hash>& missed_txs) const
 {
 	GULPS_LOG_L3("Blockchain::", __func__);
 
@@ -2466,7 +2465,7 @@ bool Blockchain::find_blockchain_supplement_indexed(const uint64_t req_start_blo
 	tx.resize(max_conc * 32);
 
 	tools::threadpool &tpool = tools::threadpool::getInstance();
-	tools::threadpool::waiter waiter;
+	tools::threadpool::waiter waiter(tpool);
 
 	for(size_t i = start_height; i < end_height; count++)
 	{
@@ -4279,15 +4278,16 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::vector<block_complete
 	tools::threadpool &tpool = tools::threadpool::getInstance();
 	uint64_t threads = tpool.get_max_concurrency();
 
-	if(blocks_entry.size() > 1 && threads > 1 && m_max_prepare_blocks_threads > 1)
+	//blocks.resize(blocks_entry.size());
+	if(1)
 	{
 		// limit threads, default limit = 4
 		if(threads > m_max_prepare_blocks_threads)
 			threads = m_max_prepare_blocks_threads;
 
 		uint64_t height = m_db->height();
-		int batches = blocks_entry.size() / threads;
-		int extra = blocks_entry.size() % threads;
+		unsigned int batches = blocks_entry.size() / threads;
+		unsigned int extra = blocks_entry.size() % threads;
 		GULPSF_LOG_L1("block_batches: {}", batches);
 		std::vector<std::unordered_map<crypto::hash, crypto::hash>> maps(threads);
 		std::vector<std::vector<block>> blocks(threads);
@@ -4296,7 +4296,7 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::vector<block_complete
 		for(uint64_t i = 0; i < threads; i++)
 		{
 			blocks[i].reserve(batches + 1);
-			for(int j = 0; j < batches; j++)
+			for(unsigned int j = 0; j < batches; j++)
 			{
 				block block;
 
@@ -4313,6 +4313,7 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::vector<block_complete
 					if(block.prev_id != tophash)
 					{
 						GULPS_LOG_L1("Skipping prepare blocks. New blocks don't belong to chain.");
+						blocks.clear();
 						return true;
 					}
 				}
@@ -4327,7 +4328,7 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::vector<block_complete
 			}
 		}
 
-		for(int i = 0; i < extra && !blocks_exist; i++)
+		for(unsigned int i = 0; i < extra && !blocks_exist; i++)
 		{
 			block block;
 
@@ -4350,7 +4351,7 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::vector<block_complete
 		if(!blocks_exist)
 		{
 			m_blocks_longhash_table.clear();
-			tools::threadpool::waiter waiter;
+			tools::threadpool::waiter waiter(tpool);
 
 			if(m_hash_ctxes_multi.size() < threads)
 				m_hash_ctxes_multi.resize(threads);
@@ -4489,7 +4490,7 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::vector<block_complete
 
 	if(threads > 1)
 	{
-		tools::threadpool::waiter waiter;
+		tools::threadpool::waiter waiter(tpool);
 
 		for(size_t i = 0; i < amounts.size(); i++)
 		{

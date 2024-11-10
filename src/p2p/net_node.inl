@@ -212,7 +212,7 @@ bool node_server<t_payload_net_handler>::make_default_config()
 }
 //-----------------------------------------------------------------------------------
 template <class t_payload_net_handler>
-bool node_server<t_payload_net_handler>::block_host(const epee::net_utils::network_address &addr, time_t seconds)
+bool node_server<t_payload_net_handler>::block_host(const epee::net_utils::network_address &addr, time_t seconds, bool add_only)
 {
 	if(!addr.is_blockable())
 		return false;
@@ -231,23 +231,6 @@ bool node_server<t_payload_net_handler>::block_host(const epee::net_utils::netwo
 	if (it == m_blocked_hosts.end())
 	{
 		m_blocked_hosts[host_str] = limit;
-
-		// if the host was already blocked due to being in a blocked subnet, let it be silent
-		bool matches_blocked_subnet = false;
-		if (addr.get_type_id() == epee::net_utils::address_type::ipv4)
-		{
-			auto ipv4_address = addr.template as<epee::net_utils::ipv4_network_address>();
-			for (auto jt = m_blocked_subnets.begin(); jt != m_blocked_subnets.end(); ++jt)
-			{
-				if (jt->first.matches(ipv4_address))
-				{
-					matches_blocked_subnet = true;
-					break;
-				}
-			}
-		}
-		if (!matches_blocked_subnet)
-			added = true;
 	}
 	else if (it->second < limit || !add_only)
 		it->second = limit;
@@ -285,7 +268,7 @@ bool node_server<t_payload_net_handler>::unblock_host(const epee::net_utils::net
 }
 //-----------------------------------------------------------------------------------
 template <class t_payload_net_handler>
-bool node_server<t_payload_net_handler>::add_host_fail(const epee::net_utils::network_address &address)
+bool node_server<t_payload_net_handler>::add_host_fail(const epee::net_utils::network_address &address, unsigned int score)
 {
 	if(!address.is_blockable())
 		return false;
@@ -735,54 +718,54 @@ bool node_server<t_payload_net_handler>::do_handshake_with_peer(peerid_type &pi,
 	std::atomic<bool> hsh_result(false);
 
 	bool r = epee::net_utils::async_invoke_remote_command2<typename COMMAND_HANDSHAKE::response>(context_.m_connection_id, COMMAND_HANDSHAKE::ID, arg, m_net_server.get_config_object(),
-																								 [this, &pi, &ev, &hsh_result, &just_take_peerlist](int code, const typename COMMAND_HANDSHAKE::response &rsp, p2p_connection_context &context) {
-																									 epee::misc_utils::auto_scope_leave_caller scope_exit_handler = epee::misc_utils::create_scope_leave_handler([&]() { ev.raise(); });
+		[this, &pi, &ev, &hsh_result, &just_take_peerlist](int code, const typename COMMAND_HANDSHAKE::response &rsp, p2p_connection_context &context) {
+			epee::misc_utils::auto_scope_leave_caller scope_exit_handler = epee::misc_utils::create_scope_leave_handler([&]() { ev.raise(); });
 
-																									 if(code < 0)
-																									 {
-																										 GULPSF_LOG_L1("{} COMMAND_HANDSHAKE invoke failed. ({}, {})", contextx_str(context), code , epee::levin::get_err_descr(code) );
-																										 return;
-																									 }
+			if(code < 0)
+			{
+				GULPSF_LOG_L1("{} COMMAND_HANDSHAKE invoke failed. ({}, {})", contextx_str(context), code , epee::levin::get_err_descr(code) );
+				return;
+			}
 
-																									 if(rsp.node_data.network_id != m_network_id)
-																									 {
-																										 GULPSF_LOG_L1("{} COMMAND_HANDSHAKE Failed, wrong network!  ({}), closing connection.", contextx_str(context), epee::string_tools::get_str_from_guid_a(rsp.node_data.network_id));
-																										 return;
-																									 }
+			if(rsp.node_data.network_id != m_network_id)
+			{
+				GULPSF_LOG_L1("{} COMMAND_HANDSHAKE Failed, wrong network!  ({}), closing connection.", contextx_str(context), epee::string_tools::get_str_from_guid_a(rsp.node_data.network_id));
+				return;
+			}
 
-																									 if(!handle_remote_peerlist(rsp.local_peerlist_new, rsp.node_data.local_time, context))
-																									 {
-																										 GULPSF_LOG_L1("{} COMMAND_HANDSHAKE: failed to handle_remote_peerlist(...), closing connection.", contextx_str(context));
-																										 add_host_fail(context.m_remote_address);
-																										 return;
-																									 }
-																									 hsh_result = true;
-																									 if(!just_take_peerlist)
-																									 {
-																										 if(!m_payload_handler.process_payload_sync_data(rsp.payload_data, context, true))
-																										 {
-																											 GULPSF_LOG_L1("{} COMMAND_HANDSHAKE invoked, but process_payload_sync_data returned false, dropping connection.", contextx_str(context));
-																											 hsh_result = false;
-																											 return;
-																										 }
+			if(!handle_remote_peerlist(rsp.local_peerlist_new, rsp.node_data.local_time, context))
+			{
+				GULPSF_LOG_L1("{} COMMAND_HANDSHAKE: failed to handle_remote_peerlist(...), closing connection.", contextx_str(context));
+				add_host_fail(context.m_remote_address);
+				return;
+			}
+			hsh_result = true;
+			if(!just_take_peerlist)
+			{
+				if(!m_payload_handler.process_payload_sync_data(rsp.payload_data, context, true))
+				{
+					GULPSF_LOG_L1("{} COMMAND_HANDSHAKE invoked, but process_payload_sync_data returned false, dropping connection.", contextx_str(context));
+					hsh_result = false;
+					return;
+				}
 
-																										 pi = context.peer_id = rsp.node_data.peer_id;
-																										 m_peerlist.set_peer_just_seen(rsp.node_data.peer_id, context.m_remote_address);
+				pi = context.peer_id = rsp.node_data.peer_id;
+				m_peerlist.set_peer_just_seen(rsp.node_data.peer_id, context.m_remote_address);
 
-																										 if(rsp.node_data.peer_id == m_config.m_peer_id)
-																										 {
-																											 GULPSF_LOG_L1("{} Connection to self detected, dropping connection", contextx_str(context));
-																											 hsh_result = false;
-																											 return;
-																										 }
-																										 GULPSF_LOG_L1("{}  COMMAND_HANDSHAKE INVOKED OK", contextx_str(context));
-																									 }
-																									 else
-																									 {
-																										 GULPSF_LOG_L1("{}  COMMAND_HANDSHAKE(AND CLOSE) INVOKED OK", contextx_str(context));
-																									 }
-																								 },
-																								 P2P_DEFAULT_HANDSHAKE_INVOKE_TIMEOUT);
+				if(rsp.node_data.peer_id == m_config.m_peer_id)
+				{
+					GULPSF_LOG_L1("{} Connection to self detected, dropping connection", contextx_str(context));
+					hsh_result = false;
+					return;
+				}
+				GULPSF_LOG_L1("{}  COMMAND_HANDSHAKE INVOKED OK", contextx_str(context));
+			}
+			else
+			{
+				GULPSF_LOG_L1("{}  COMMAND_HANDSHAKE(AND CLOSE) INVOKED OK", contextx_str(context));
+			}
+		},
+		P2P_DEFAULT_HANDSHAKE_INVOKE_TIMEOUT);
 
 	if(r)
 	{
