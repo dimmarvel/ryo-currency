@@ -102,7 +102,6 @@ core_rpc_server::core_rpc_server(
 	core &cr, nodetool::node_server<cryptonote::t_cryptonote_protocol_handler<cryptonote::core>> &p2p)
 	: m_core(cr)
 	, m_p2p(p2p)
-	, disable_rpc_ban(false)
 {
 }
 //------------------------------------------------------------------------------------------------------------------------------
@@ -117,7 +116,6 @@ bool core_rpc_server::init(
 	if(!rpc_config)
 		return false;
 
-	disable_rpc_ban = rpc_config->disable_rpc_ban;
 	m_bootstrap_daemon_address = command_line::get_arg(vm, arg_bootstrap_daemon_address);
 	if(!m_bootstrap_daemon_address.empty())
 	{
@@ -163,7 +161,7 @@ bool core_rpc_server::check_core_ready()
 //------------------------------------------------------------------------------------------------------------------------------
 bool core_rpc_server::add_host_fail(const connection_context *ctx, unsigned int score)
 {
-	if(!ctx || !ctx->m_remote_address.is_blockable() || disable_rpc_ban)
+	if(!ctx || !ctx->m_remote_address.is_blockable())
 		return false;
 
 	CRITICAL_REGION_LOCAL(m_host_fails_score_lock);
