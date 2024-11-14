@@ -236,5 +236,4 @@ std::string get_human_readable_bytes(uint64_t bytes);
 
 std::string get_human_readable_timespan(uint64_t seconds);
 
-uint64_t cumulative_block_sync_weight(cryptonote::network_type nettype, uint64_t start_block, uint64_t num_blocks);
 }

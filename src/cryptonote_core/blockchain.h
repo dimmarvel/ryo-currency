@@ -232,7 +232,7 @@ class Blockchain
      *
      * @return false on erroneous blocks, else true
      */
-     bool prepare_handle_incoming_blocks(const std::vector<block_complete_entry>  &blocks_entry);
+	bool prepare_handle_incoming_blocks(const std::vector<block_complete_entry>  &blocks_entry);
 
 	/**
      * @brief incoming blocks post-processing, cleanup, and disk sync
