@@ -341,10 +341,10 @@ void connection<t_protocol_handler>::handle_read(const boost::system::error_code
 		{
 			reset_timer(get_timeout_from_bytes_read(bytes_transferred), false);
 			socket_.async_read_some(boost::asio::buffer(buffer_),
-									strand_.wrap(
-										boost::bind(&connection<t_protocol_handler>::handle_read, connection<t_protocol_handler>::shared_from_this(),
-													boost::asio::placeholders::error,
-													boost::asio::placeholders::bytes_transferred)));
+				strand_.wrap(
+					boost::bind(&connection<t_protocol_handler>::handle_read, connection<t_protocol_handler>::shared_from_this(),
+								boost::asio::placeholders::error,
+								boost::asio::placeholders::bytes_transferred)));
 			//GULPS_INFO("[sock " << socket_.native_handle() << "]Async read requested.");
 		}
 	}

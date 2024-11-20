@@ -718,7 +718,7 @@ bool node_server<t_payload_net_handler>::do_handshake_with_peer(peerid_type &pi,
 	std::atomic<bool> hsh_result(false);
 
 	bool r = epee::net_utils::async_invoke_remote_command2<typename COMMAND_HANDSHAKE::response>(context_.m_connection_id, COMMAND_HANDSHAKE::ID, arg, m_net_server.get_config_object(),
-		[this, &pi, &ev, &hsh_result, &just_take_peerlist](int code, const typename COMMAND_HANDSHAKE::response &rsp, p2p_connection_context &context) {
+		[this, &pi, &ev, &hsh_result, &just_take_peerlist, &context_](int code, const typename COMMAND_HANDSHAKE::response &rsp, p2p_connection_context &context) {
 			epee::misc_utils::auto_scope_leave_caller scope_exit_handler = epee::misc_utils::create_scope_leave_handler([&]() { ev.raise(); });
 
 			if(code < 0)
@@ -764,6 +764,7 @@ bool node_server<t_payload_net_handler>::do_handshake_with_peer(peerid_type &pi,
 			{
 				GULPSF_LOG_L1("{}  COMMAND_HANDSHAKE(AND CLOSE) INVOKED OK", contextx_str(context));
 			}
+			context_ = context;
 		},
 		P2P_DEFAULT_HANDSHAKE_INVOKE_TIMEOUT);
 
@@ -922,14 +923,6 @@ bool node_server<t_payload_net_handler>::try_to_connect_and_handshake_with_new_p
 									m_config.m_net_config.connection_timeout,
 									con);
 
-	if(!res)
-	{
-		bool is_priority = is_priority_node(na);
-		GULPS_INFO( "{} {} Connect failed to {}", contextx_str(con), priority_str(is_priority), na.str()
-								   /*<< ", try " << try_count*/);
-		//m_peerlist.set_peer_unreachable(pe);
-		return false;
-	}
 
 	peerid_type pi = AUTO_VAL_INIT(pi);
 	res = do_handshake_with_peer(pi, con, just_take_peerlist);

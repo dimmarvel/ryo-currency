@@ -100,17 +100,17 @@ t_cryptonote_protocol_handler<t_core>::t_cryptonote_protocol_handler(t_core &rco
 template <class t_core>
 bool t_cryptonote_protocol_handler<t_core>::init(const boost::program_options::variables_map &vm)
 {
-    m_sync_timer.pause();
-    m_sync_timer.reset();
-    m_add_timer.pause();
-    m_add_timer.reset();
-    m_last_add_end_time = 0;
-    m_sync_spans_downloaded = 0;
-    m_sync_old_spans_downloaded = 0;
-    m_sync_bad_spans_downloaded = 0;
-    m_sync_download_chain_size = 0;
+	m_sync_timer.pause();
+	m_sync_timer.reset();
+	m_add_timer.pause();
+	m_add_timer.reset();
+	m_last_add_end_time = 0;
+	m_sync_spans_downloaded = 0;
+	m_sync_old_spans_downloaded = 0;
+	m_sync_bad_spans_downloaded = 0;
+	m_sync_download_chain_size = 0;
 	m_sync_download_objects_size = 0;
-    m_block_download_max_size = command_line::get_arg(vm, arg_block_download_max_size);
+	m_block_download_max_size = command_line::get_arg(vm, arg_block_download_max_size);
 	return true;
 }
 //------------------------------------------------------------------------------------------------------------------------
@@ -136,45 +136,12 @@ bool t_cryptonote_protocol_handler<t_core>::on_callback(cryptonote_connection_co
 	GULPS_CHECK_AND_ASSERT_MES_CONTEXT(context.m_callback_request_count > 0, false, "false callback fired, but context.m_callback_request_count=", context.m_callback_request_count);
 	--context.m_callback_request_count;
 
-	uint32_t notified = true;
-	if (context.m_idle_peer_notification.compare_exchange_strong(notified, not notified))
+	if(context.m_state == cryptonote_connection_context::state_synchronizing)
 	{
-		if (context.m_state == cryptonote_connection_context::state_synchronizing && context.m_last_request_time != boost::date_time::not_a_date_time)
-		{
-			const boost::posix_time::ptime now = boost::posix_time::microsec_clock::universal_time();
-			const boost::posix_time::time_duration dt = now - context.m_last_request_time;
-			const auto ms = dt.total_microseconds();
-			if (ms > IDLE_PEER_KICK_TIME || (context.m_expect_response && ms > NON_RESPONSIVE_PEER_KICK_TIME))
-			{
-				if (context.m_score-- >= 0)
-				{
-					GULPS_LOG_L1("{} kicking idle peer, last update {} seconds ago, expecting {}", context_str, (dt.total_microseconds() / 1.e6), (int)context.m_expect_response);
-					context.m_last_request_time = boost::date_time::not_a_date_time;
-					context.m_expect_response = 0;
-					context.m_expect_height = 0;
-					context.m_requested_objects.clear();
-					context.m_state = cryptonote_connection_context::state_standby; // we'll go back to adding, then (if we can't), download
-				}
-				else
-				{
-					GULPS_LOG_L1(context_str, "dropping idle peer with negative score");
-					drop_connection_with_score(context, context.m_expect_response == 0 ? 1 : 5, false);
-					return false;
-				}
-			}
-		}
-	}
-
-	if(context.m_state == cryptonote_connection_context::state_synchronizing && context.m_last_request_time == boost::posix_time::not_a_date_time)
-		
-	{
-		NOTIFY_REQUEST_CHAIN::request r = {};
+		NOTIFY_REQUEST_CHAIN::request r = boost::value_initialized<NOTIFY_REQUEST_CHAIN::request>();
 		context.m_needed_objects.clear();
-		context.m_expect_height = m_core.get_current_blockchain_height();
 		m_core.get_short_chain_history(r.block_ids);
 		handler_request_blocks_history( r.block_ids ); // change the limit(?), sleep(?)
-		context.m_last_request_time = boost::posix_time::microsec_clock::universal_time();
-		context.m_expect_response = NOTIFY_RESPONSE_CHAIN_ENTRY::ID;
 		GULPS_P2P_MESSAGE("-->>NOTIFY_REQUEST_CHAIN: m_block_ids.size()={}", r.block_ids.size() );
 		post_notify<NOTIFY_REQUEST_CHAIN>(r, context);
 		GULPS_LOG_L1("requesting chain");
@@ -385,7 +352,6 @@ bool t_cryptonote_protocol_handler<t_core>::process_payload_sync_data(const CORE
 		GULPSF_GLOBAL_PRINT("\n{} Sync data returned a new top block candidate: {} -> {} [Your node is {} blocks ({} days {})]\nSYNCHRONIZATION started", context_str, m_core.get_current_blockchain_height(),
 					hshd.current_height, abs_diff, ((abs_diff - diff_v2) / (24 * 60 * 60 / common_config::DIFFICULTY_TARGET)) + (diff_v2 / (24 * 60 * 60 / common_config::DIFFICULTY_TARGET)),
 					(0 <= diff ? std::string("behind") : std::string("ahead")));
-
 		if(hshd.current_height >= m_core.get_current_blockchain_height() + 5) // don't switch to unsafe mode just for a few blocks
 			m_core.safesyncmode(false);
 		if (m_core.get_target_blockchain_height() == 0) // only when sync starts
@@ -492,11 +458,8 @@ int t_cryptonote_protocol_handler<t_core>::handle_notify_new_block(int command, 
 		context.m_needed_objects.clear();
 		context.m_state = cryptonote_connection_context::state_synchronizing;
 		NOTIFY_REQUEST_CHAIN::request r = boost::value_initialized<NOTIFY_REQUEST_CHAIN::request>();
-		context.m_expect_height = m_core.get_current_blockchain_height();
 		m_core.get_short_chain_history(r.block_ids);
 		handler_request_blocks_history( r.block_ids ); // change the limit(?), sleep(?)
-		context.m_last_request_time = boost::posix_time::microsec_clock::universal_time();
-		context.m_expect_response = NOTIFY_RESPONSE_CHAIN_ENTRY::ID;
 		GULPSF_LOG_L1("{} -->>NOTIFY_REQUEST_CHAIN: m_block_ids.size()={}", context_str, r.block_ids.size());
 		post_notify<NOTIFY_REQUEST_CHAIN>(r, context);
 		GULPS_LOG_L1("requesting chain");
@@ -747,11 +710,8 @@ int t_cryptonote_protocol_handler<t_core>::handle_notify_new_fluffy_block(int co
 				context.m_needed_objects.clear();
 				context.m_state = cryptonote_connection_context::state_synchronizing;
 				NOTIFY_REQUEST_CHAIN::request r = boost::value_initialized<NOTIFY_REQUEST_CHAIN::request>();
-				context.m_expect_height = m_core.get_current_blockchain_height();
 				m_core.get_short_chain_history(r.block_ids);
 				handler_request_blocks_history( r.block_ids ); // change the limit(?), sleep(?)
-				context.m_last_request_time = boost::posix_time::microsec_clock::universal_time();
-				context.m_expect_response = NOTIFY_RESPONSE_CHAIN_ENTRY::ID;
 				GULPSF_LOG_L1("{} -->>NOTIFY_REQUEST_CHAIN: m_block_ids.size()={}", context_str, r.block_ids.size());
 				post_notify<NOTIFY_REQUEST_CHAIN>(r, context);
 				GULPS_LOG_L1("requesting chain");
@@ -892,7 +852,6 @@ int t_cryptonote_protocol_handler<t_core>::handle_request_get_objects(int comman
 		drop_connection(context, false, false);
 		return 1;
 	}
-    context.m_last_request_time = boost::posix_time::microsec_clock::universal_time();
 	GULPSF_LOG_L1("{} -->>NOTIFY_RESPONSE_GET_OBJECTS: blocks.size()={}, txs.size()={}, rsp.m_current_blockchain_height={}, missed_ids.size()={}", context_str, rsp.blocks.size() , rsp.txs.size() , rsp.current_blockchain_height , rsp.missed_ids.size());
 	post_notify<NOTIFY_RESPONSE_GET_OBJECTS>(rsp, context);
 	//handler_response_blocks_now(sizeof(rsp)); // XXX
@@ -923,14 +882,6 @@ int t_cryptonote_protocol_handler<t_core>::handle_response_get_objects(int comma
 
 	boost::posix_time::ptime request_time = context.m_last_request_time;
 	context.m_last_request_time = boost::date_time::not_a_date_time;
-
-	if (context.m_expect_response != NOTIFY_RESPONSE_GET_OBJECTS::ID)
-	{
-		GULPS_LOG_ERROR("Got NOTIFY_RESPONSE_GET_OBJECTS out of the blue, dropping connection");
-		drop_connection(context, true, false);
-		return 1;
-	}
-	context.m_expect_response = 0;
 
 	// calculate size of request
 	size_t size = 0;
@@ -1019,16 +970,7 @@ int t_cryptonote_protocol_handler<t_core>::handle_response_get_objects(int comma
 			return 1;
 		}
 		if(start_height == std::numeric_limits<uint64_t>::max())
-		{
 			start_height = boost::get<txin_gen>(b.miner_tx.vin[0]).height;
-			if (start_height > context.m_expect_height)
-			{
-				GULPS_LOG_ERROR("sent block ahead of expected height, dropping connection");
-				drop_connection(context, false, false);
-				++m_sync_bad_spans_downloaded;
-				return 1;
-			}
-		}
 
 		const crypto::hash block_hash = get_block_hash(b);
 		auto req_it = context.m_requested_objects.find(block_hash);
@@ -1390,7 +1332,7 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 					timing_message = std::string(" (") + std::to_string(dt.total_microseconds()/1e6) + " sec, "
 						+ std::to_string((current_blockchain_height - previous_height) * 1e6 / dt.total_microseconds())
 						+ " blocks/sec), " + std::to_string(m_block_queue.get_data_size() / 1048576.f) + " MB queued";
-					GULPSF_GLOBAL_PRINT_CLR(gulps::COLOR_BOLD_YELLOW, "{} Synced {}/{} {} {}", 
+					GULPSF_GLOBAL_PRINT_CLR(gulps::COLOR_BOLD_YELLOW, "{} Synced {}/{} {} {}", context_str,
 						current_blockchain_height, target_blockchain_height, progress_message, timing_message);
 					GULPS_CAT_LOG_L1("global","", m_block_queue.get_overview());
 				}
@@ -1433,13 +1375,14 @@ bool t_cryptonote_protocol_handler<t_core>::kick_idle_peers()
 			const boost::posix_time::ptime now = boost::posix_time::microsec_clock::universal_time();
 			const boost::posix_time::time_duration dt = now - context.m_last_request_time;
 			const auto ms = dt.total_microseconds();
-			if (ms > IDLE_PEER_KICK_TIME || (context.m_expect_response && ms > NON_RESPONSIVE_PEER_KICK_TIME))
+			if (dt.total_microseconds() > IDLE_PEER_KICK_TIME)
 			{
-				context.m_idle_peer_notification = true;
-				GULPS_INFO("requesting callback");
+				GULPS_INFO("{} kicking idle peer, last update {}  seconds ago", context_str, (dt.total_microseconds() / 1.e6));
+				context.m_last_request_time = boost::date_time::not_a_date_time;
+				context.m_state = cryptonote_connection_context::state_standby; // we'll go back to adding, then (if we can't), download
 				++context.m_callback_request_count;
-				m_p2p->request_callback(context);
 				GULPS_INFO("requesting callback");
+				m_p2p->request_callback(context);
 			}
 		}
 		return true;
@@ -1797,8 +1740,6 @@ bool t_cryptonote_protocol_handler<t_core>::request_missing_objects(cryptonote_c
 			}
 
 			context.m_last_request_time = boost::posix_time::microsec_clock::universal_time();
-			context.m_expect_height = span.first;
-			context.m_expect_response = NOTIFY_RESPONSE_GET_OBJECTS::ID;
 			GULPS_P2P_MESSAGE("-->>NOTIFY_REQUEST_GET_OBJECTS: blocks.size()={} requested blocks count={} / {} from {} , first hash {}", 
 				req.blocks.size(), count, count_limit, span.first,req.blocks.front());
 			//epee::net_utils::network_throttle_manager::get_global_throttle_inreq().logger_handle_net("log/dr-monero/net/req-all.data", sec, get_avg_block_size());
@@ -1852,7 +1793,6 @@ skip:
 	{
 		//we have to fetch more objects ids, request blockchain entry
 		NOTIFY_REQUEST_CHAIN::request r = {};
-		context.m_expect_height = m_core.get_current_blockchain_height();
 		m_core.get_short_chain_history(r.block_ids);
 		GULPS_CHECK_AND_ASSERT_MES(!r.block_ids.empty(), false, "Short chain history is empty");
 
@@ -1860,10 +1800,7 @@ skip:
 		{
 			// we'll want to start off from where we are on that peer, which may not be added yet
 			if (context.m_last_known_hash != crypto::null_hash && r.block_ids.front() != context.m_last_known_hash)
-			{
-			context.m_expect_height = std::numeric_limits<uint64_t>::max();
-			r.block_ids.push_front(context.m_last_known_hash);
-			}
+				r.block_ids.push_front(context.m_last_known_hash);
 		}
 
 		handler_request_blocks_history( r.block_ids ); // change the limit(?), sleep(?)
@@ -1874,7 +1811,6 @@ skip:
 		//LOG_PRINT_CCONTEXT_L1("r = " << 200);
 
 		context.m_last_request_time = boost::posix_time::microsec_clock::universal_time();
-		context.m_expect_response = NOTIFY_RESPONSE_CHAIN_ENTRY::ID;
 		GULPS_P2P_MESSAGE("-->>NOTIFY_REQUEST_CHAIN: m_block_ids.size()={}, start_from_current_chain {}", r.block_ids.size(), start_from_current_chain);
 		post_notify<NOTIFY_REQUEST_CHAIN>(r, context);
 		GULPS_LOG_L1("requesting chain");
@@ -1970,22 +1906,8 @@ size_t t_cryptonote_protocol_handler<t_core>::get_synchronizing_connections_coun
 template <class t_core>
 int t_cryptonote_protocol_handler<t_core>::handle_response_chain_entry(int command, NOTIFY_RESPONSE_CHAIN_ENTRY::request &arg, cryptonote_connection_context &context)
 {
-	GULPS_P2P_MESSAGE("Received NOTIFY_RESPONSE_CHAIN_ENTRY: m_block_ids.size()={}, m_start_height={}, m_total_height={}", arg.m_block_ids.size() , arg.start_height , arg.total_height);
-
-	if (context.m_expect_response != NOTIFY_RESPONSE_CHAIN_ENTRY::ID)
-	{
-		GULPS_ERROR("Got NOTIFY_RESPONSE_CHAIN_ENTRY out of the blue, dropping connection");
-		drop_connection(context, true, false);
-		return 1;
-	}
-
-	context.m_expect_response = 0;
-	if (arg.start_height + 1 > context.m_expect_height) // we expect an overlapping block
-	{
-		GULPS_ERROR("Got NOTIFY_RESPONSE_CHAIN_ENTRY past expected height, dropping connection");
-		drop_connection(context, true, false);
-		return 1;
-	}
+	GULPS_P2P_MESSAGE("Received NOTIFY_RESPONSE_CHAIN_ENTRY: m_block_ids.size()={}, m_total_height={}", arg.m_block_ids.size() , arg.total_height);
+	GULPSF_LOG_L1("received chain");
 
 	context.m_last_request_time = boost::date_time::not_a_date_time;
 	m_sync_download_chain_size += arg.m_block_ids.size() * sizeof(crypto::hash);
