@@ -822,6 +822,7 @@ bool core::check_tx_semantic(const transaction &tx, bool keeped_by_block) const
 		if(!rct::verRctSemanticsSimple(rv))
 		{
 			GULPS_VERIFY_ERR_TX("rct signature semantics check failed");
+			
 			return false;
 		}
 		break;

@@ -1052,11 +1052,6 @@ class Blockchain
 
 	std::atomic<bool> m_cancel;
 
-	// for prepare_handle_incoming_blocks
-	uint64_t m_prepare_height;
-	uint64_t m_prepare_nblocks;
-	std::vector<block> *m_prepare_blocks;
-
 	/**
      * @brief collects the keys for all outputs being "spent" as an input
      *

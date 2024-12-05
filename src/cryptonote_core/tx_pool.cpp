@@ -458,6 +458,10 @@ bool tx_memory_pool::take_tx(const crypto::hash &id, transaction &tx, size_t &bl
 			GULPS_ERROR("Failed to parse tx from txpool");
 			return false;
 		}
+		else
+		{
+			tx.set_hash(id);
+		}
 		blob_size = meta.blob_size;
 		fee = meta.fee;
 		relayed = meta.relayed;
@@ -762,6 +766,7 @@ bool tx_memory_pool::get_transactions_and_spent_keys_info(std::vector<tx_info> &
 			// continue
 			return true;
 		}
+		tx.set_hash(txid);
 		txi.tx_json = obj_to_json_str(tx);
 		txi.blob_size = meta.blob_size;
 		txi.fee = meta.fee;
@@ -829,13 +834,13 @@ bool tx_memory_pool::get_pool_for_rpc(std::vector<cryptonote::rpc::tx_in_pool> &
 		cryptonote::rpc::tx_in_pool txi;
 		txi.tx_hash = txid;
 		transaction tx;
-		if(!parse_and_validate_tx_from_blob(*bd, tx))
+		if(!parse_and_validate_tx_from_blob(*bd, txi.tx))
 		{
 			GULPS_ERROR("Failed to parse tx from txpool");
 			// continue
 			return true;
 		}
-		txi.tx = tx;
+		txi.tx.set_hash(txid);
 		txi.blob_size = meta.blob_size;
 		txi.fee = meta.fee;
 		txi.kept_by_block = meta.kept_by_block;

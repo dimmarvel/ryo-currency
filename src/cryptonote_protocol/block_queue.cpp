@@ -92,6 +92,7 @@ void block_queue::add_blocks(uint64_t height, uint64_t nblocks, const boost::uui
 {
 	GULPS_CHECK_AND_ASSERT_THROW_MES(nblocks > 0, "Empty span");
 	boost::unique_lock<boost::recursive_mutex> lock(mutex);
+	printf("---> add_blocks span(height, nblocks) %ld, %ld \n", height, nblocks);
 	blocks.insert(span(height, nblocks, connection_id, addr, time));
 }
 
@@ -190,6 +191,8 @@ uint64_t block_queue::get_next_needed_height(uint64_t blockchain_height) const
 		if (span.start_block_height != last_needed_height || (first && span.blocks.empty()))
 			return last_needed_height;
 		last_needed_height = span.start_block_height + span.nblocks;
+		printf("---> get_next_needed_height last_needed_height = span.start_block_height + span.nblocks %ld = %ld + %ld\n",
+			last_needed_height, span.start_block_height, span.nblocks);
 		first = false;
 	}
 	return last_needed_height;
@@ -292,6 +295,7 @@ std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_hei
 	}
 
 	GULPSF_LOG_L1("Reserving span {} - {} for {}", span_start_height, (span_start_height + span_length - 1), boost::uuids::to_string(connection_id));
+	printf("---> reserve_span span_start_height, span_length %ld, %ld\n", span_start_height, span_length);
 	add_blocks(span_start_height, span_length, connection_id, addr, time);
 	set_span_hashes(span_start_height, connection_id, hashes);
 	

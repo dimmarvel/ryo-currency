@@ -1222,11 +1222,13 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 					{
 						if(tvc[i].m_verifivation_failed)
 						{
-							drop_connections(span_origin);
 							if(!m_p2p->for_connection(span_connection_id, [&](cryptonote_connection_context &context, nodetool::peerid_type peer_id, uint32_t f) -> bool {
-									GULPSF_LOG_ERROR("{} transaction verification failed on NOTIFY_RESPONSE_GET_OBJECTS, tx_id = {}, dropping connection", context_str, epee::string_tools::pod_to_hex(get_blob_hash(*it)) );
-									drop_connection(context, false, true);
-									return 1;
+								cryptonote::transaction tx;
+								parse_and_validate_tx_from_blob(*it, tx); // must succeed if we got here
+								GULPSF_LOG_ERROR("{} transaction verification failed on NOTIFY_RESPONSE_GET_OBJECTS, tx_id = {}, dropping connection",
+									context_str, epee::string_tools::pod_to_hex(cryptonote::get_transaction_hash(tx)) );
+								drop_connection(context, false, true);
+								return 1;
 							}))
 							GULPS_ERROR( context_str, " span connection id not found");
 
@@ -1680,6 +1682,8 @@ bool t_cryptonote_protocol_handler<t_core>::request_missing_objects(cryptonote_c
 
 			const uint64_t first_block_height = context.m_last_response_height - context.m_needed_objects.size() + 1;
 			static const uint64_t bp_fork_height = m_core.get_earliest_ideal_height_for_version(8);
+			printf("---> request_missing_objects m_block_queue.reserve_span(first_block_height, context.m_last_response_height, count_limit) %ld, %ld, %ld\n",
+				first_block_height, context.m_last_response_height, count_limit);
 			span = m_block_queue.reserve_span(first_block_height, context.m_last_response_height, count_limit, 
 				context.m_connection_id, context.m_remote_address, context.m_remote_blockchain_height, context.m_needed_objects);
 
