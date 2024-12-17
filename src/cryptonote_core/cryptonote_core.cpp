@@ -639,6 +639,7 @@ bool core::handle_incoming_tx_post(const blobdata &tx_blob, tx_verification_cont
 bool core::handle_incoming_txs(const std::vector<blobdata> &tx_blobs, std::vector<tx_verification_context> &tvc, bool keeped_by_block, bool relayed, bool do_not_relay)
 {
 	GULPS_TRY_ENTRY();
+	CRITICAL_REGION_LOCAL(m_incoming_tx_lock);
 
 	struct result
 	{
@@ -821,15 +822,16 @@ bool core::check_tx_semantic(const transaction &tx, bool keeped_by_block) const
 		// and there is very little point in polishing turds
 		if(!rct::verRctSemanticsSimple(rv))
 		{
-			GULPS_VERIFY_ERR_TX("rct signature semantics check failed");
-			
+			GULPSF_VERIFY_ERR_TX("verRctSemanticsSimple - rct signature semantics check failed tx id= {}", 
+				epee::string_tools::pod_to_hex(get_transaction_hash(tx)));
 			return false;
 		}
 		break;
 	case rct::RCTTypeFull:
 		if(!rct::verRct(rv, true))
 		{
-			GULPS_VERIFY_ERR_TX("rct signature semantics check failed");
+			GULPSF_VERIFY_ERR_TX("verRct - rct signature semantics check failed tx id= {}", 
+				epee::string_tools::pod_to_hex(get_transaction_hash(tx)));
 			return false;
 		}
 		break;

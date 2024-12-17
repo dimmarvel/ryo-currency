@@ -374,7 +374,6 @@ bool t_cryptonote_protocol_handler<t_core>::process_payload_sync_data(const CORE
 	GULPS_LOG_L1( context_str, " requesting callback");
 	++context.m_callback_request_count;
 	m_p2p->request_callback(context);
-    context.m_num_requested = 0;
 	return true;
 }
 //------------------------------------------------------------------------------------------------------------------------
@@ -1211,6 +1210,7 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 					TIME_MEASURE_START(transactions_process_time);
 					num_txs += block_entry.txs.size();
 					std::vector<tx_verification_context> tvc;
+					printf("------> %ld", tvc.size());
 					m_core.handle_incoming_txs(block_entry.txs, tvc, true, true, false);
 					if(tvc.size() != block_entry.txs.size())
 					{
@@ -1495,6 +1495,39 @@ bool t_cryptonote_protocol_handler<t_core>::should_download_next_span(cryptonote
 }
 //------------------------------------------------------------------------------------------------------------------------
 template<class t_core>
+bool t_cryptonote_protocol_handler<t_core>::should_drop_connection(cryptonote_connection_context& context)
+{
+	if (context.m_anchor)
+	{
+		GULPS_LOG_L1(context_str, "Anchor peer detected, not dropping connection.");
+		return false;
+	}
+
+	if (!context.m_needed_objects.empty())
+	{
+		GULPS_LOG_L1(context_str, "Peer has needed objects (size: ", context.m_needed_objects.size(), "), not dropping connection.");
+		return false;
+	}
+
+	unsigned int n_out_peers = 0;
+	m_p2p->for_each_connection([&](cryptonote_connection_context& ctx, nodetool::peerid_type peer_id, uint32_t support_flags) -> bool {
+		if (!ctx.m_is_income)
+			++n_out_peers;
+		return true;
+	});
+
+	if (n_out_peers >= m_max_out_peers)
+	{
+		GULPS_LOG_L1(context_str, "Maximum outgoing peers reached (", n_out_peers, "/", m_max_out_peers.load(), "), dropping connection.");
+		return true;
+	}
+
+	GULPS_LOG_L1(context_str, "All checks passed, not dropping connection.");
+	return false;
+}
+
+//------------------------------------------------------------------------------------------------------------------------
+template<class t_core>
 size_t t_cryptonote_protocol_handler<t_core>::skip_unneeded_hashes(cryptonote_connection_context& context, bool check_block_queue) const
 {
 	// take out blocks we already have
@@ -1538,25 +1571,37 @@ bool t_cryptonote_protocol_handler<t_core>::request_missing_objects(cryptonote_c
 		const size_t block_queue_size_threshold = m_block_download_max_size ? m_block_download_max_size : BLOCK_QUEUE_SIZE_THRESHOLD;
 		bool queue_proceed = nspans < BLOCK_QUEUE_NSPANS_THRESHOLD || size < block_queue_size_threshold;
 		// get rid of blocks we already requested, or already have
-		if (skip_unneeded_hashes(context, true) && context.m_needed_objects.empty() && context.m_num_requested == 0)
+		skip_unneeded_hashes(context, true);
+		uint64_t next_needed_height = m_block_queue.get_next_needed_height(bc_height);
+		uint64_t next_block_height;
+		if (context.m_needed_objects.empty())
+			next_block_height = next_needed_height;
+		else
+			next_block_height = context.m_last_response_height - context.m_needed_objects.size() + 1;
+
+		bool stripe_proceed_main = (next_block_height < bc_height + BLOCK_QUEUE_FORCE_DOWNLOAD_NEAR_BLOCKS || next_needed_height < bc_height + BLOCK_QUEUE_FORCE_DOWNLOAD_NEAR_BLOCKS);
+		bool proceed = stripe_proceed_main || queue_proceed;
+		if (!stripe_proceed_main && should_drop_connection(context))
 		{
-			if (context.m_remote_blockchain_height > m_block_queue.get_next_needed_height(bc_height))
-			{
-				GULPS_LOG_ERROR("{} Nothing we can request from this peer, and we did not request anything previously", context_str);
-				return false;
-			}
-			GULPS_LOG_L1(context_str, "Nothing to get from this peer, and it's not ahead of us, all done");
-			context.m_state = cryptonote_connection_context::state_normal;
-			if (m_core.get_current_blockchain_height() >= m_core.get_target_blockchain_height())
-				on_connection_synchronized();
-			return true;
+			GULPS_LOG_L1(context_str, 
+				"Dropping connection: connection should be dropped based on context checks.");
+			return false; // drop outgoing connections
 		}
-		bool proceed = queue_proceed;
+
+		GULPS_LOG_L1(context_str, "Proceed: ", proceed, 
+			" (Queue: ", queue_proceed, ", Stripe: ", stripe_proceed_main,  "), ", "Blockchain height: ", bc_height);
+
+		GULPS_LOG_L1(context_str, "Next block height: ", next_block_height, 
+			", Next needed height: ", next_needed_height);
+
+		GULPS_LOG_L1(context_str, "Last response height: ", context.m_last_response_height, 
+			", Needed objects size: ", context.m_needed_objects.size());
+
 		GULPS_LOG_L1("last_response_height=", context.m_last_response_height, ", m_needed_objects size=", context.m_needed_objects.size());
 
 		// if we're waiting for next span, try to get it before unblocking threads below,
 		// or a runaway downloading of future spans might happen
-		if (should_download_next_span(context, true))
+		if (stripe_proceed_main && should_download_next_span(context, true))
 		{
 			GULPS_LOG_L1(context_str, "We should try for that next span too, resuming");
 			force_next_span = true;
@@ -1658,7 +1703,7 @@ bool t_cryptonote_protocol_handler<t_core>::request_missing_objects(cryptonote_c
 		}
 		if (span.second == 0)
 		{
-        	GULPS_LOG_L1(context_str, " span size is 0");
+			GULPS_LOG_L1(context_str, " span size is 0");
 			if (context.m_last_response_height + 1 < context.m_needed_objects.size())
 			{
 				GULPSF_LOG_L1("{} ERROR: inconsistent context: lrh {}, nos {}", context_str, context.m_last_response_height, context.m_needed_objects.size());
@@ -1666,19 +1711,7 @@ bool t_cryptonote_protocol_handler<t_core>::request_missing_objects(cryptonote_c
 				context.m_last_response_height = 0;
 				goto skip;
 			}
-			if (skip_unneeded_hashes(context, false) && context.m_needed_objects.empty() && context.m_num_requested == 0)
-			{
-				if (context.m_remote_blockchain_height > m_block_queue.get_next_needed_height(m_core.get_current_blockchain_height()))
-				{
-					GULPS_LOG_ERROR(context_str, "Nothing we can request from this peer, and we did not request anything previously");
-					return false;
-				}
-				GULPS_LOG_L1(context_str, "Nothing to get from this peer, and it's not ahead of us, all done");
-				context.m_state = cryptonote_connection_context::state_normal;
-				if (m_core.get_current_blockchain_height() >= m_core.get_target_blockchain_height())
-					on_connection_synchronized();
-				return true;
-			}
+			skip_unneeded_hashes(context, false);
 
 			const uint64_t first_block_height = context.m_last_response_height - context.m_needed_objects.size() + 1;
 			static const uint64_t bp_fork_height = m_core.get_earliest_ideal_height_for_version(8);
@@ -1748,7 +1781,6 @@ bool t_cryptonote_protocol_handler<t_core>::request_missing_objects(cryptonote_c
 				req.blocks.size(), count, count_limit, span.first,req.blocks.front());
 			//epee::net_utils::network_throttle_manager::get_global_throttle_inreq().logger_handle_net("log/dr-monero/net/req-all.data", sec, get_avg_block_size());
 
-			context.m_num_requested += req.blocks.size();
 			post_notify<NOTIFY_REQUEST_GET_OBJECTS>(req, context);
 			GULPS_LOG_L1("requesting objects");
 			return true;
@@ -2132,6 +2164,24 @@ void t_cryptonote_protocol_handler<t_core>::drop_connection_with_score(cryptonot
 	m_block_queue.flush_spans(context.m_connection_id, flush_all_spans);
 
 	m_p2p->drop_connection(context);
+}
+//------------------------------------------------------------------------------------------------------------------------
+template<class t_core>
+bool t_cryptonote_protocol_handler<t_core>::needs_new_sync_connections() const
+{
+	const uint64_t target = m_core.get_target_blockchain_height();
+	const uint64_t height = m_core.get_current_blockchain_height();
+	if (target && target <= height)
+		return false;
+	size_t n_out_peers = 0;
+	m_p2p->for_each_connection([&](cryptonote_connection_context& ctx, nodetool::peerid_type peer_id, uint32_t support_flags)->bool{
+		if (!ctx.m_is_income)
+		++n_out_peers;
+		return true;
+	});
+	if (n_out_peers >= m_max_out_peers)
+		return false;
+	return true;
 }
 //------------------------------------------------------------------------------------------------------------------------
 template <class t_core>

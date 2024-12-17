@@ -918,6 +918,7 @@ bool node_server<t_payload_net_handler>::try_to_connect_and_handshake_with_new_p
 	const epee::net_utils::ipv4_network_address &ipv4 = na.as<const epee::net_utils::ipv4_network_address>();
 
 	typename net_server::t_connection_context con = AUTO_VAL_INIT(con);
+	con.m_anchor = peer_type == anchor;
 	bool res = m_net_server.connect(epee::string_tools::get_ip_string_from_int32(ipv4.ip()),
 									epee::string_tools::num_to_string_fast(ipv4.port()),
 									m_config.m_net_config.connection_timeout,
@@ -973,6 +974,7 @@ bool node_server<t_payload_net_handler>::check_connection_and_handshake_with_pee
 	const epee::net_utils::ipv4_network_address &ipv4 = na.as<epee::net_utils::ipv4_network_address>();
 
 	typename net_server::t_connection_context con = AUTO_VAL_INIT(con);
+	con.m_anchor = false;
 	bool res = m_net_server.connect(epee::string_tools::get_ip_string_from_int32(ipv4.ip()),
 									epee::string_tools::num_to_string_fast(ipv4.port()),
 									m_config.m_net_config.connection_timeout,
@@ -1827,13 +1829,11 @@ bool node_server<t_payload_net_handler>::parse_peers_and_add_to_container(const 
 template <class t_payload_net_handler>
 bool node_server<t_payload_net_handler>::set_max_out_peers(const boost::program_options::variables_map &vm, int64_t max)
 {
-	if(max == -1)
-	{
-		m_config.m_net_config.max_out_connection_count = P2P_DEFAULT_CONNECTIONS_COUNT;
-		return true;
-	}
-	m_config.m_net_config.max_out_connection_count = max;
-	return true;
+    if(max == -1)
+      max = P2P_DEFAULT_CONNECTIONS_COUNT;
+    m_config.m_net_config.max_out_connection_count = max;
+    m_payload_handler.set_max_out_peers(max);
+    return true;
 }
 
 template <class t_payload_net_handler>
@@ -1961,6 +1961,8 @@ bool node_server<t_payload_net_handler>::gray_peerlist_housekeeping()
 	if(m_offline)
 		return true;
 	if(!m_exclusive_peers.empty())
+		return true;
+	if (m_payload_handler.needs_new_sync_connections())
 		return true;
 
 	peerlist_entry pe = AUTO_VAL_INIT(pe);
