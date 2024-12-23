@@ -908,14 +908,6 @@ int t_cryptonote_protocol_handler<t_core>::handle_response_get_objects(int comma
     m_sync_download_objects_size += size;
 	GULPSF_LOG_L1("{} downloaded {} bytes worth of blocks", context_str, size);
 
-	if(arg.blocks.empty())
-	{
-		GULPS_LOG_ERROR("sent wrong NOTIFY_HAVE_OBJECTS: no blocks");
-		drop_connection(context, true, false);
-		++m_sync_bad_spans_downloaded;
-		return 1;
-	}
-
 	/*using namespace boost::chrono;
 	auto point = steady_clock::now();
 	auto time_from_epoh = point.time_since_epoch();
@@ -994,23 +986,12 @@ int t_cryptonote_protocol_handler<t_core>::handle_response_get_objects(int comma
 		block_hashes.push_back(block_hash);
 	}
 
-	if(context.m_requested_objects.size())
+	if(!context.m_requested_objects.empty())
 	{
 		GULPSF_LOG_L1("returned not all requested objects (context.m_requested_objects.size()={}), dropping connection", context.m_requested_objects.size() );
 		drop_connection(context, false, false);
 		++m_sync_bad_spans_downloaded;
 		return 1;
-	}
-
-	// get the last parsed block, which should be the highest one
-	const crypto::hash last_block_hash = cryptonote::get_block_hash(b);
-	if(m_core.have_block(last_block_hash))
-	{
-		const uint64_t subchain_height = start_height + arg.blocks.size();
-		GULPSF_LOG_L1("{} These are old blocks, ignoring: blocks {} - {}, blockchain height {}", context_str, start_height , (subchain_height - 1) , m_core.get_current_blockchain_height());
-		m_block_queue.remove_spans(context.m_connection_id, start_height);
-		++m_sync_old_spans_downloaded;
-		goto skip;
 	}
 
 	{
@@ -1023,6 +1004,7 @@ int t_cryptonote_protocol_handler<t_core>::handle_response_get_objects(int comma
 		GULPSF_LOG_L1("{} adding span: {} at height {}, {} seconds, {} kB/s, size now {} MB", context_str, arg.blocks.size() , start_height , dt.total_microseconds() / 1e6 , (rate / 1e3) , (m_block_queue.get_data_size() + blocks_size) / 1048576.f );
 		m_block_queue.add_blocks(start_height, arg.blocks, context.m_connection_id, context.m_remote_address, rate, blocks_size);
 
+		const crypto::hash last_block_hash = cryptonote::get_block_hash(b);
 		context.m_last_known_hash = last_block_hash;
 
 		if(!m_core.get_test_drop_download() || !m_core.get_test_drop_download_height())
@@ -1031,7 +1013,6 @@ int t_cryptonote_protocol_handler<t_core>::handle_response_get_objects(int comma
 		}
 	}
 
-skip:
 	try_add_next_blocks(context);
 	return 1;
 }
@@ -1141,8 +1122,20 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 				{
 					GULPS_ERROR("Failed to parse block, but it should already have been parsed");
 					m_block_queue.remove_spans(span_connection_id, start_height);
-					break;
+					continue;
 				}
+
+				const crypto::hash last_block_hash = cryptonote::get_block_hash(new_block);
+				if (m_core.have_block(last_block_hash))
+				{
+					const uint64_t subchain_height = start_height + blocks.size();
+					GULPSF_LOG_L1("{} These are old blocks, ignoring: blocks {} - {} , blockchain height {}", 
+						context_str, start_height, (subchain_height-1), m_core.get_current_blockchain_height());
+					m_block_queue.remove_spans(span_connection_id, start_height);
+					++m_sync_old_spans_downloaded;
+					continue;
+				}
+
 				bool parent_known = m_core.have_block(new_block.prev_id);
 				if(!parent_known)
 				{
@@ -1154,6 +1147,25 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 					bool parent_requested = m_block_queue.requested(new_block.prev_id);
 					if(!parent_requested)
 					{
+						// we might be able to ask for that block directly, as we now can request out of order,
+						// otherwise we continue out of order, unless this block is the one we need, in which
+						// case we request block hashes, though it might be safer to disconnect ?
+						if (start_height > previous_height)
+						{
+							if (should_drop_connection(context))
+							{
+								GULPS_LOG_L1(context_str, 
+									"Dropping connection: received block with unknown parent, which was not requested, and peer does not have that block.");
+								drop_connection(context, false, true);
+								return 1;
+							}
+
+							GULPS_LOG_L1(context_str, 
+								"Back to downloading: received block with unknown parent, which was not requested, but peer does not have that block.");
+
+							goto skip;
+						}
+
 						// this can happen if a connection was sicced onto a late span, if it did not have those blocks,
 						// since we don't know that at the sic time
 						GULPS_ERROR( context_str, " Got block with unknown parent which was not requested - querying block hashes");
@@ -1210,7 +1222,7 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 					TIME_MEASURE_START(transactions_process_time);
 					num_txs += block_entry.txs.size();
 					std::vector<tx_verification_context> tvc;
-					printf("------> %ld", tvc.size());
+					printf("------> %ld\n", tvc.size());
 					m_core.handle_incoming_txs(block_entry.txs, tvc, true, true, false);
 					if(tvc.size() != block_entry.txs.size())
 					{
@@ -1256,9 +1268,9 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 					{
 						drop_connections(span_origin);
 						if(!m_p2p->for_connection(span_connection_id, [&](cryptonote_connection_context &context, nodetool::peerid_type peer_id, uint32_t f) -> bool {
-							   GULPS_INFO( context_str, " Block verification failed, dropping connection");
+							GULPS_INFO( context_str, " Block verification failed, dropping connection");
 								drop_connection_with_score(context, bvc.m_bad_pow ? P2P_IP_FAILS_BEFORE_BLOCK : 1, true);
-							   return 1;
+							return 1;
 						}))
 						GULPS_ERROR( context_str, " span connection id not found");
 
@@ -1341,11 +1353,18 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 			}
 		}
 
-		if(should_download_next_span(context, false))
+		if (should_download_next_span(context, false))
 		{
-			context.m_needed_objects.clear();
-			context.m_last_response_height = 0;
 			force_next_span = true;
+		}
+		else if (should_drop_connection(context))
+		{
+			if (!context.m_is_income)
+			{
+				GULPS_ERROR(context_str, "Should drop connection because context");
+				drop_connection(context, false, false);
+			}
+			return 1;
 		}
 	}
 
@@ -1554,8 +1573,8 @@ bool t_cryptonote_protocol_handler<t_core>::request_missing_objects(cryptonote_c
 // flush stale spans
 	std::set<boost::uuids::uuid> live_connections;
 	m_p2p->for_each_connection([&](cryptonote_connection_context& context, nodetool::peerid_type peer_id, uint32_t support_flags)->bool{
-	live_connections.insert(context.m_connection_id);
-	return true;
+		live_connections.insert(context.m_connection_id);
+		return true;
 	});
 	m_block_queue.flush_stale_spans(live_connections);
 
@@ -1563,114 +1582,114 @@ bool t_cryptonote_protocol_handler<t_core>::request_missing_objects(cryptonote_c
 	bool start_from_current_chain = false;
 	if (!force_next_span)
 	{
-	do
-	{
-		size_t nspans = m_block_queue.get_num_filled_spans();
-		size_t size = m_block_queue.get_data_size();
-		const uint64_t bc_height = m_core.get_current_blockchain_height();
-		const size_t block_queue_size_threshold = m_block_download_max_size ? m_block_download_max_size : BLOCK_QUEUE_SIZE_THRESHOLD;
-		bool queue_proceed = nspans < BLOCK_QUEUE_NSPANS_THRESHOLD || size < block_queue_size_threshold;
-		// get rid of blocks we already requested, or already have
-		skip_unneeded_hashes(context, true);
-		uint64_t next_needed_height = m_block_queue.get_next_needed_height(bc_height);
-		uint64_t next_block_height;
-		if (context.m_needed_objects.empty())
-			next_block_height = next_needed_height;
-		else
-			next_block_height = context.m_last_response_height - context.m_needed_objects.size() + 1;
-
-		bool stripe_proceed_main = (next_block_height < bc_height + BLOCK_QUEUE_FORCE_DOWNLOAD_NEAR_BLOCKS || next_needed_height < bc_height + BLOCK_QUEUE_FORCE_DOWNLOAD_NEAR_BLOCKS);
-		bool proceed = stripe_proceed_main || queue_proceed;
-		if (!stripe_proceed_main && should_drop_connection(context))
+		do
 		{
-			GULPS_LOG_L1(context_str, 
-				"Dropping connection: connection should be dropped based on context checks.");
-			return false; // drop outgoing connections
-		}
-
-		GULPS_LOG_L1(context_str, "Proceed: ", proceed, 
-			" (Queue: ", queue_proceed, ", Stripe: ", stripe_proceed_main,  "), ", "Blockchain height: ", bc_height);
-
-		GULPS_LOG_L1(context_str, "Next block height: ", next_block_height, 
-			", Next needed height: ", next_needed_height);
-
-		GULPS_LOG_L1(context_str, "Last response height: ", context.m_last_response_height, 
-			", Needed objects size: ", context.m_needed_objects.size());
-
-		GULPS_LOG_L1("last_response_height=", context.m_last_response_height, ", m_needed_objects size=", context.m_needed_objects.size());
-
-		// if we're waiting for next span, try to get it before unblocking threads below,
-		// or a runaway downloading of future spans might happen
-		if (stripe_proceed_main && should_download_next_span(context, true))
-		{
-			GULPS_LOG_L1(context_str, "We should try for that next span too, resuming");
-			force_next_span = true;
-			GULPS_LOG_L1("resuming");
-			break;
-		}
-
-		if (proceed)
-		{
-			if (context.m_state != cryptonote_connection_context::state_standby)
-			{
-				GULPS_LOG_L1(context_str, "Block queue is ", nspans, " and ", size, ", resuming");
-				GULPS_LOG_L1("resuming");
-			}
-			break;
-		}
-
-		// this one triggers if all threads are in standby, which should not happen,
-		// but happened at least once, so we unblock at least one thread if so
-		boost::unique_lock<boost::mutex> sync{m_sync_lock, boost::try_to_lock};
-		if (sync.owns_lock())
-		{
-			bool filled = false;
-			boost::posix_time::ptime time;
-			boost::uuids::uuid connection_id;
-			if (m_block_queue.has_next_span(m_core.get_current_blockchain_height(), filled, time, connection_id) && filled)
-			{
-				GULPS_LOG_L1(context_str, "No other thread is adding blocks, and next span needed is ready, resuming");
-				GULPS_LOG_L1("resuming");
-				context.m_state = cryptonote_connection_context::state_standby;
-				++context.m_callback_request_count;
-				m_p2p->request_callback(context);
-				return true;
-			}
+			size_t nspans = m_block_queue.get_num_filled_spans();
+			size_t size = m_block_queue.get_data_size();
+			const uint64_t bc_height = m_core.get_current_blockchain_height();
+			const size_t block_queue_size_threshold = m_block_download_max_size ? m_block_download_max_size : BLOCK_QUEUE_SIZE_THRESHOLD;
+			bool queue_proceed = nspans < BLOCK_QUEUE_NSPANS_THRESHOLD || size < block_queue_size_threshold;
+			// get rid of blocks we already requested, or already have
+			skip_unneeded_hashes(context, true);
+			uint64_t next_needed_height = m_block_queue.get_next_needed_height(bc_height);
+			uint64_t next_block_height;
+			if (context.m_needed_objects.empty())
+				next_block_height = next_needed_height;
 			else
-			{
-				sync.unlock();
+				next_block_height = context.m_last_response_height - context.m_needed_objects.size() + 1;
 
-				// if this has gone on for too long, drop incoming connection to guard against some wedge state
-				if (!context.m_is_income)
+			bool stripe_proceed_main = (next_block_height < bc_height + BLOCK_QUEUE_FORCE_DOWNLOAD_NEAR_BLOCKS || next_needed_height < bc_height + BLOCK_QUEUE_FORCE_DOWNLOAD_NEAR_BLOCKS);
+			bool proceed = stripe_proceed_main || queue_proceed;
+			if (!stripe_proceed_main && should_drop_connection(context))
+			{
+				GULPS_LOG_L1(context_str, 
+					"Dropping connection: connection should be dropped based on context checks.");
+				return false; // drop outgoing connections
+			}
+
+			GULPS_LOG_L1(context_str, "Proceed: ", proceed, 
+				" (Queue: ", queue_proceed, ", Stripe: ", stripe_proceed_main,  "), ", "Blockchain height: ", bc_height);
+
+			GULPS_LOG_L1(context_str, "Next block height: ", next_block_height, 
+				", Next needed height: ", next_needed_height);
+
+			GULPS_LOG_L1(context_str, "Last response height: ", context.m_last_response_height, 
+				", Needed objects size: ", context.m_needed_objects.size());
+
+			GULPS_LOG_L1("last_response_height=", context.m_last_response_height, ", m_needed_objects size=", context.m_needed_objects.size());
+
+			// if we're waiting for next span, try to get it before unblocking threads below,
+			// or a runaway downloading of future spans might happen
+			if (stripe_proceed_main && should_download_next_span(context, true))
+			{
+				GULPS_LOG_L1(context_str, "We should try for that next span too, resuming");
+				force_next_span = true;
+				GULPS_LOG_L1("resuming");
+				break;
+			}
+
+			if (proceed)
+			{
+				if (context.m_state != cryptonote_connection_context::state_standby)
 				{
-					const uint64_t now = tools::get_tick_count();
-					const uint64_t dt = now - m_last_add_end_time;
-					if (m_last_add_end_time && tools::ticks_to_ns(dt) >= DROP_ON_SYNC_WEDGE_THRESHOLD)
+					GULPS_LOG_L1(context_str, "Block queue is ", nspans, " and ", size, ", resuming");
+					GULPS_LOG_L1("resuming");
+				}
+				break;
+			}
+
+			// this one triggers if all threads are in standby, which should not happen,
+			// but happened at least once, so we unblock at least one thread if so
+			boost::unique_lock<boost::mutex> sync{m_sync_lock, boost::try_to_lock};
+			if (sync.owns_lock())
+			{
+				bool filled = false;
+				boost::posix_time::ptime time;
+				boost::uuids::uuid connection_id;
+				if (m_block_queue.has_next_span(m_core.get_current_blockchain_height(), filled, time, connection_id) && filled)
+				{
+					GULPS_LOG_L1(context_str, "No other thread is adding blocks, and next span needed is ready, resuming");
+					GULPS_LOG_L1("resuming");
+					context.m_state = cryptonote_connection_context::state_standby;
+					++context.m_callback_request_count;
+					m_p2p->request_callback(context);
+					return true;
+				}
+				else
+				{
+					sync.unlock();
+
+					// if this has gone on for too long, drop incoming connection to guard against some wedge state
+					if (!context.m_is_income)
 					{
-						GULPS_LOG_L1(context_str, "ns ", tools::ticks_to_ns(dt), " from ", m_last_add_end_time, " and ", now);
-						GULPS_LOG_L1(context_str, "Block addition seems to have wedged, dropping connection");
-						return false;
+						const uint64_t now = tools::get_tick_count();
+						const uint64_t dt = now - m_last_add_end_time;
+						if (m_last_add_end_time && tools::ticks_to_ns(dt) >= DROP_ON_SYNC_WEDGE_THRESHOLD)
+						{
+							GULPS_LOG_L1(context_str, "ns ", tools::ticks_to_ns(dt), " from ", m_last_add_end_time, " and ", now);
+							GULPS_LOG_L1(context_str, "Block addition seems to have wedged, dropping connection");
+							return false;
+						}
 					}
 				}
 			}
-		}
 
-		if (context.m_state != cryptonote_connection_context::state_standby)
-		{
-			if (!queue_proceed)
-				GULPS_LOG_L1(context_str, "Block queue is ", nspans, " and ", size, ", pausing");
-			context.m_state = cryptonote_connection_context::state_standby;
-			GULPS_LOG_L1("pausing");
-		}
+			if (context.m_state != cryptonote_connection_context::state_standby)
+			{
+				if (!queue_proceed)
+					GULPS_LOG_L1(context_str, "Block queue is ", nspans, " and ", size, ", pausing");
+				context.m_state = cryptonote_connection_context::state_standby;
+				GULPS_LOG_L1("pausing");
+			}
 
-		return true;
-	} while(0);
-	context.m_state = cryptonote_connection_context::state_synchronizing;
+			return true;
+		} while(0);
+		context.m_state = cryptonote_connection_context::state_synchronizing;
 	}
 
-   	GULPS_LOG_L1("request_missing_objects: check=", check_having_blocks, ", force_next_span=", force_next_span,
-        ", m_needed_objects=", context.m_needed_objects.size(), ", lrh=", context.m_last_response_height,
-        ", chain=", m_core.get_current_blockchain_height());
+	GULPS_LOG_L1("request_missing_objects: check=", check_having_blocks, ", force_next_span=", force_next_span,
+		", m_needed_objects=", context.m_needed_objects.size(), ", lrh=", context.m_last_response_height,
+		", chain=", m_core.get_current_blockchain_height());
 
 	if(context.m_needed_objects.size() || force_next_span)
 	{
