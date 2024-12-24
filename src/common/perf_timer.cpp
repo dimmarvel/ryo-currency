@@ -186,4 +186,12 @@ void PerformanceTimer::resume()
 	ticks = get_tick_count() - ticks;
 	paused = false;
 }
+
+void PerformanceTimer::reset()
+{
+	if (paused)
+		ticks = 0;
+	else
+		ticks = get_tick_count();
+}
 }

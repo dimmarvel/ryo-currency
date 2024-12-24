@@ -1095,7 +1095,7 @@ class wallet2
 	void get_short_chain_history(std::list<crypto::hash> &ids) const;
 	bool is_tx_spendtime_unlocked(uint64_t unlock_time, uint64_t block_height) const;
 	bool clear();
-	void pull_hashes(uint64_t start_height, uint64_t &blocks_start_height, const std::list<crypto::hash> &short_chain_history, std::list<crypto::hash> &hashes);
+	void pull_hashes(uint64_t start_height, uint64_t &blocks_start_height, const std::list<crypto::hash> &short_chain_history, std::vector<crypto::hash> &hashes);
 	void fast_refresh(uint64_t stop_height, uint64_t &blocks_start_height, std::list<crypto::hash> &short_chain_history);
 	uint64_t select_transfers(uint64_t needed_money, std::vector<size_t> unused_transfers_indices, std::vector<size_t> &selected_transfers, bool trusted_daemon) const;
 	bool prepare_file_names(const std::string &file_path);

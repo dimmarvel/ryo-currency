@@ -176,7 +176,7 @@ class Blockchain
      *
      * @return false if start_offset > blockchain height, else true
      */
-	bool get_blocks(uint64_t start_offset, size_t count, std::list<std::pair<cryptonote::blobdata, block>> &blocks, std::list<cryptonote::blobdata> &txs) const;
+	bool get_blocks(uint64_t start_offset, size_t count, std::vector<std::pair<cryptonote::blobdata, block>> &blocks, std::vector<cryptonote::blobdata> &txs) const;
 
 	/**
      * @brief get blocks from blocks based on start height and count
@@ -187,7 +187,7 @@ class Blockchain
      *
      * @return false if start_offset > blockchain height, else true
      */
-	bool get_blocks(uint64_t start_offset, size_t count, std::list<std::pair<cryptonote::blobdata, block>> &blocks) const;
+	bool get_blocks(uint64_t start_offset, size_t count, std::vector<std::pair<cryptonote::blobdata, block>> &blocks) const;
 
 	/**
      * @brief compiles a list of all blocks stored as alternative chains
@@ -196,7 +196,7 @@ class Blockchain
      *
      * @return true
      */
-	bool get_alternative_blocks(std::list<block> &blocks) const;
+	bool get_alternative_blocks(std::vector<block> &blocks) const;
 
 	/**
      * @brief returns the number of alternative blocks stored
@@ -232,7 +232,7 @@ class Blockchain
      *
      * @return false on erroneous blocks, else true
      */
-	bool prepare_handle_incoming_blocks(const std::list<block_complete_entry> &blocks);
+	bool prepare_handle_incoming_blocks(const std::vector<block_complete_entry>  &blocks_entry);
 
 	/**
      * @brief incoming blocks post-processing, cleanup, and disk sync
@@ -353,7 +353,8 @@ class Blockchain
      *
      * @return true if the block is known, else false
      */
-	bool have_block(const crypto::hash &id) const;
+     bool have_block_unlocked(const crypto::hash& id, int *where = NULL) const;
+	bool have_block(const crypto::hash &id, int *where = NULL) const;
 
 	/**
      * @brief gets the total number of transactions on the main chain
@@ -392,7 +393,7 @@ class Blockchain
      *
      * @return true if a block found in common, else false
      */
-	bool find_blockchain_supplement(const std::list<crypto::hash> &qblock_ids, std::list<crypto::hash> &hashes, uint64_t &start_height, uint64_t &current_height) const;
+	bool find_blockchain_supplement(const std::list<crypto::hash> &qblock_ids, std::vector<crypto::hash> &hashes, uint64_t &start_height, uint64_t &current_height) const;
 
 	/**
      * @brief get recent block hashes for a foreign chain
@@ -438,7 +439,7 @@ class Blockchain
      *
      * @return true if a block found in common or req_start_block specified, else false
      */
-	bool find_blockchain_supplement(const uint64_t req_start_block, const std::list<crypto::hash> &qblock_ids, std::list<std::pair<cryptonote::blobdata, std::list<cryptonote::blobdata>>> &blocks, uint64_t &total_height, uint64_t &start_height, size_t max_count) const;
+	bool find_blockchain_supplement(const uint64_t req_start_block, const std::list<crypto::hash> &qblock_ids, std::vector<std::pair<cryptonote::blobdata, std::vector<cryptonote::blobdata>>> &blocks, uint64_t &total_height, uint64_t &start_height, size_t max_count) const;
 
 	bool find_blockchain_supplement_indexed(const uint64_t req_start_block, const std::list<crypto::hash> &qblock_ids, std::vector<block_complete_entry_v>& blocks,
 			std::vector<COMMAND_RPC_GET_BLOCKS_FAST::block_output_indices>& out_idx, uint64_t &total_height, uint64_t &start_height, size_t max_count) const;
@@ -689,8 +690,7 @@ class Blockchain
      *
      * @return false if an unexpected exception occurs, else true
      */
-	template <class t_ids_container, class t_tx_container, class t_missed_container>
-	bool get_transactions_blobs(const t_ids_container &txs_ids, t_tx_container &txs, t_missed_container &missed_txs) const;
+     bool get_transactions_blobs(const std::vector<crypto::hash>& txs_ids, std::vector<cryptonote::blobdata>& txs, std::vector<crypto::hash>& missed_txs) const;
 	template <class t_ids_container, class t_tx_container, class t_missed_container>
 	bool get_transactions(const t_ids_container &txs_ids, t_tx_container &txs, t_missed_container &missed_txs) const;
 
@@ -805,6 +805,13 @@ class Blockchain
      */
 	uint8_t get_hard_fork_version(uint64_t height) const { return m_hardfork->get(height); }
 
+     /**
+     * @brief returns the earliest block a given version may activate
+     *
+     * @return the height
+     */
+     uint64_t get_earliest_ideal_height_for_version(uint8_t version) const { return m_hardfork->get_earliest_ideal_height_for_version(version); }
+
 	/**
      * @brief get information about hardfork voting for a version
      *
@@ -833,7 +840,7 @@ class Blockchain
      *
      * @return false if any removals fail, otherwise true
      */
-	bool flush_txes_from_pool(const std::list<crypto::hash> &txids);
+	bool flush_txes_from_pool(const std::vector<crypto::hash> &txids);
 
 	/**
      * @brief return a histogram of outputs on the blockchain
@@ -954,7 +961,7 @@ class Blockchain
 
 	bool is_within_compiled_block_hash_area(uint64_t height) const;
 	bool is_within_compiled_block_hash_area() const { return is_within_compiled_block_hash_area(m_db->height()); }
-	uint64_t prevalidate_block_hashes(uint64_t height, const std::list<crypto::hash> &hashes);
+	uint64_t prevalidate_block_hashes(uint64_t height, const std::vector<crypto::hash> &hashes);
 
 	void lock();
 	void unlock();

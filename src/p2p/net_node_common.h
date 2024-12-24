@@ -68,10 +68,10 @@ struct i_p2p_endpoint
 	virtual uint64_t get_connections_count() = 0;
 	virtual void for_each_connection(std::function<bool(t_connection_context &, peerid_type, uint32_t)> f) = 0;
 	virtual bool for_connection(const boost::uuids::uuid &, std::function<bool(t_connection_context &, peerid_type, uint32_t)> f) = 0;
-	virtual bool block_host(const epee::net_utils::network_address &address, time_t seconds = 0) = 0;
+	virtual bool block_host(const epee::net_utils::network_address &address, time_t seconds = 0, bool add_only = false) = 0;
 	virtual bool unblock_host(const epee::net_utils::network_address &address) = 0;
 	virtual std::map<std::string, time_t> get_blocked_hosts() = 0;
-	virtual bool add_host_fail(const epee::net_utils::network_address &address) = 0;
+	virtual bool add_host_fail(const epee::net_utils::network_address &address, unsigned int score = 1)=0;
 };
 
 template <class t_connection_context>
@@ -112,7 +112,7 @@ struct p2p_endpoint_stub : public i_p2p_endpoint<t_connection_context>
 	{
 		return false;
 	}
-	virtual bool block_host(const epee::net_utils::network_address &address, time_t seconds)
+	virtual bool block_host(const epee::net_utils::network_address &address, time_t seconds, bool add_only)
 	{
 		return true;
 	}
@@ -124,7 +124,7 @@ struct p2p_endpoint_stub : public i_p2p_endpoint<t_connection_context>
 	{
 		return std::map<std::string, time_t>();
 	}
-	virtual bool add_host_fail(const epee::net_utils::network_address &address)
+	virtual bool add_host_fail(const epee::net_utils::network_address &address, unsigned int score)
 	{
 		return true;
 	}

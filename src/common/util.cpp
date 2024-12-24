@@ -784,37 +784,73 @@ bool sha256sum(const std::string &filename, crypto::hash &hash)
 	return true;
 }
 
+
+std::string get_human_readable_timespan(uint64_t seconds)
+{
+	if (seconds < 60)
+		return std::to_string(seconds) + " seconds";
+	std::stringstream ss;
+	ss << std::fixed << std::setprecision(1);
+	if (seconds < 3600)
+	{
+		ss << seconds / 60.f;
+		return ss.str() + " minutes";
+	}
+	if (seconds < 3600 * 24)
+	{
+		ss << seconds / 3600.f;
+		return ss.str() + " hours";
+	}
+	if (seconds < 3600 * 24 * 30.5f)
+	{
+		ss << seconds / (3600 * 24.f);
+		return ss.str() + " days";
+	}
+	if (seconds < 3600 * 24 * 365.25f)
+	{
+		ss << seconds / (3600 * 24 * 30.5f);
+		return ss.str() + " months";
+	}
+	if (seconds < 3600 * 24 * 365.25f * 100)
+	{
+		ss << seconds / (3600 * 24 * 365.25f);
+		return ss.str() + " years";
+	}
+	return "a long time";
+}
+
 std::string get_human_readable_bytes(uint64_t bytes)
 {
-  // Use 1024 for "kilo", 1024*1024 for "mega" and so on instead of the more modern and standard-conforming
-  // 1000, 1000*1000 and so on, to be consistent with other Monero code that also uses base 2 units
-  struct byte_map
-  {
-      const char* const format;
-      const std::uint64_t bytes;
-  };
+	// Use 1024 for "kilo", 1024*1024 for "mega" and so on instead of the more modern and standard-conforming
+	// 1000, 1000*1000 and so on, to be consistent with other Monero code that also uses base 2 units
+	struct byte_map
+	{
+		const char* const format;
+		const std::uint64_t bytes;
+	};
 
-   static constexpr const byte_map sizes[] =
-  {
-      {"%.0f B", 1024},
-      {"%.2f kB", 1024 * 1024},
-      {"%.2f MB", std::uint64_t(1024) * 1024 * 1024},
-      {"%.2f GB", std::uint64_t(1024) * 1024 * 1024 * 1024},
-      {"%.2f TB", std::uint64_t(1024) * 1024 * 1024 * 1024 * 1024}
-  };
+	static constexpr const byte_map sizes[] =
+	{
+		{"%.0f B", 1024},
+		{"%.2f kB", 1024 * 1024},
+		{"%.2f MB", std::uint64_t(1024) * 1024 * 1024},
+		{"%.2f GB", std::uint64_t(1024) * 1024 * 1024 * 1024},
+		{"%.2f TB", std::uint64_t(1024) * 1024 * 1024 * 1024 * 1024}
+	};
 
-   struct bytes_less
-  {
-      bool operator()(const byte_map& lhs, const byte_map& rhs) const noexcept
-      {
-          return lhs.bytes < rhs.bytes;
-      }
-  };
+	struct bytes_less
+	{
+		bool operator()(const byte_map& lhs, const byte_map& rhs) const noexcept
+		{
+			return lhs.bytes < rhs.bytes;
+		}
+	};
 
-   const auto size = std::upper_bound(
-      std::begin(sizes), std::end(sizes) - 1, byte_map{"", bytes}, bytes_less{}
-  );
-  const std::uint64_t divisor = size->bytes / 1024;
-  return (boost::format(size->format) % (double(bytes) / divisor)).str();
+	const auto size = std::upper_bound(
+		std::begin(sizes), std::end(sizes) - 1, byte_map{"", bytes}, bytes_less{}
+	);
+	const std::uint64_t divisor = size->bytes / 1024;
+	return (boost::format(size->format) % (double(bytes) / divisor)).str();
 }
+
 }

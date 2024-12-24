@@ -233,4 +233,7 @@ bool sha256sum(const uint8_t *data, size_t len, crypto::hash &hash);
 bool sha256sum(const std::string &filename, crypto::hash &hash);
 	
 std::string get_human_readable_bytes(uint64_t bytes);
+
+std::string get_human_readable_timespan(uint64_t seconds);
+
 }

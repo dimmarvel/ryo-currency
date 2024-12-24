@@ -212,10 +212,32 @@ bool node_server<t_payload_net_handler>::make_default_config()
 }
 //-----------------------------------------------------------------------------------
 template <class t_payload_net_handler>
-bool node_server<t_payload_net_handler>::block_host(const epee::net_utils::network_address &addr, time_t seconds)
+bool node_server<t_payload_net_handler>::block_host(const epee::net_utils::network_address &addr, time_t seconds, bool add_only)
 {
+	if(!addr.is_blockable())
+		return false;
+
+	const time_t now = time(nullptr);
+	bool added = false;
+
 	CRITICAL_REGION_LOCAL(m_blocked_hosts_lock);
-	m_blocked_hosts[addr.host_str()] = time(nullptr) + seconds;
+	time_t limit;
+	if (now > std::numeric_limits<time_t>::max() - seconds)
+		limit = std::numeric_limits<time_t>::max();
+	else
+		limit = now + seconds;
+	const std::string host_str = addr.host_str();
+	auto it = m_blocked_hosts.find(host_str);
+	if (it == m_blocked_hosts.end())
+	{
+		m_blocked_hosts[host_str] = limit;
+	}
+	else if (it->second < limit || !add_only)
+		it->second = limit;
+
+	// drop any connection to that address. This should only have to look into
+	// the zone related to the connection, but really make sure everything is
+	// swept ...
 
 	// drop any connection to that IP
 	std::list<boost::uuids::uuid> conns;
@@ -246,10 +268,13 @@ bool node_server<t_payload_net_handler>::unblock_host(const epee::net_utils::net
 }
 //-----------------------------------------------------------------------------------
 template <class t_payload_net_handler>
-bool node_server<t_payload_net_handler>::add_host_fail(const epee::net_utils::network_address &address)
+bool node_server<t_payload_net_handler>::add_host_fail(const epee::net_utils::network_address &address, unsigned int score)
 {
+	if(!address.is_blockable())
+		return false;
+
 	CRITICAL_REGION_LOCAL(m_host_fails_score_lock);
-	uint64_t fails = ++m_host_fails_score[address.host_str()];
+    uint64_t fails = m_host_fails_score[address.host_str()] += score;
 	GULPSF_LOG_L1("Host {} fail score={}", address.host_str() , fails);
 	if(fails > P2P_IP_FAILS_BEFORE_BLOCK)
 	{
@@ -693,54 +718,55 @@ bool node_server<t_payload_net_handler>::do_handshake_with_peer(peerid_type &pi,
 	std::atomic<bool> hsh_result(false);
 
 	bool r = epee::net_utils::async_invoke_remote_command2<typename COMMAND_HANDSHAKE::response>(context_.m_connection_id, COMMAND_HANDSHAKE::ID, arg, m_net_server.get_config_object(),
-																								 [this, &pi, &ev, &hsh_result, &just_take_peerlist](int code, const typename COMMAND_HANDSHAKE::response &rsp, p2p_connection_context &context) {
-																									 epee::misc_utils::auto_scope_leave_caller scope_exit_handler = epee::misc_utils::create_scope_leave_handler([&]() { ev.raise(); });
+		[this, &pi, &ev, &hsh_result, &just_take_peerlist, &context_](int code, const typename COMMAND_HANDSHAKE::response &rsp, p2p_connection_context &context) {
+			epee::misc_utils::auto_scope_leave_caller scope_exit_handler = epee::misc_utils::create_scope_leave_handler([&]() { ev.raise(); });
 
-																									 if(code < 0)
-																									 {
-																										 GULPSF_LOG_L1("{} COMMAND_HANDSHAKE invoke failed. ({}, {})", contextx_str(context), code , epee::levin::get_err_descr(code) );
-																										 return;
-																									 }
+			if(code < 0)
+			{
+				GULPSF_LOG_L1("{} COMMAND_HANDSHAKE invoke failed. ({}, {})", contextx_str(context), code , epee::levin::get_err_descr(code) );
+				return;
+			}
 
-																									 if(rsp.node_data.network_id != m_network_id)
-																									 {
-																										 GULPSF_LOG_L1("{} COMMAND_HANDSHAKE Failed, wrong network!  ({}), closing connection.", contextx_str(context), epee::string_tools::get_str_from_guid_a(rsp.node_data.network_id));
-																										 return;
-																									 }
+			if(rsp.node_data.network_id != m_network_id)
+			{
+				GULPSF_LOG_L1("{} COMMAND_HANDSHAKE Failed, wrong network!  ({}), closing connection.", contextx_str(context), epee::string_tools::get_str_from_guid_a(rsp.node_data.network_id));
+				return;
+			}
 
-																									 if(!handle_remote_peerlist(rsp.local_peerlist_new, rsp.node_data.local_time, context))
-																									 {
-																										 GULPSF_LOG_L1("{} COMMAND_HANDSHAKE: failed to handle_remote_peerlist(...), closing connection.", contextx_str(context));
-																										 add_host_fail(context.m_remote_address);
-																										 return;
-																									 }
-																									 hsh_result = true;
-																									 if(!just_take_peerlist)
-																									 {
-																										 if(!m_payload_handler.process_payload_sync_data(rsp.payload_data, context, true))
-																										 {
-																											 GULPSF_LOG_L1("{} COMMAND_HANDSHAKE invoked, but process_payload_sync_data returned false, dropping connection.", contextx_str(context));
-																											 hsh_result = false;
-																											 return;
-																										 }
+			if(!handle_remote_peerlist(rsp.local_peerlist_new, rsp.node_data.local_time, context))
+			{
+				GULPSF_LOG_L1("{} COMMAND_HANDSHAKE: failed to handle_remote_peerlist(...), closing connection.", contextx_str(context));
+				add_host_fail(context.m_remote_address);
+				return;
+			}
+			hsh_result = true;
+			if(!just_take_peerlist)
+			{
+				if(!m_payload_handler.process_payload_sync_data(rsp.payload_data, context, true))
+				{
+					GULPSF_LOG_L1("{} COMMAND_HANDSHAKE invoked, but process_payload_sync_data returned false, dropping connection.", contextx_str(context));
+					hsh_result = false;
+					return;
+				}
 
-																										 pi = context.peer_id = rsp.node_data.peer_id;
-																										 m_peerlist.set_peer_just_seen(rsp.node_data.peer_id, context.m_remote_address);
+				pi = context.peer_id = rsp.node_data.peer_id;
+				m_peerlist.set_peer_just_seen(rsp.node_data.peer_id, context.m_remote_address);
 
-																										 if(rsp.node_data.peer_id == m_config.m_peer_id)
-																										 {
-																											 GULPSF_LOG_L1("{} Connection to self detected, dropping connection", contextx_str(context));
-																											 hsh_result = false;
-																											 return;
-																										 }
-																										 GULPSF_LOG_L1("{}  COMMAND_HANDSHAKE INVOKED OK", contextx_str(context));
-																									 }
-																									 else
-																									 {
-																										 GULPSF_LOG_L1("{}  COMMAND_HANDSHAKE(AND CLOSE) INVOKED OK", contextx_str(context));
-																									 }
-																								 },
-																								 P2P_DEFAULT_HANDSHAKE_INVOKE_TIMEOUT);
+				if(rsp.node_data.peer_id == m_config.m_peer_id)
+				{
+					GULPSF_LOG_L1("{} Connection to self detected, dropping connection", contextx_str(context));
+					hsh_result = false;
+					return;
+				}
+				GULPSF_LOG_L1("{}  COMMAND_HANDSHAKE INVOKED OK", contextx_str(context));
+			}
+			else
+			{
+				GULPSF_LOG_L1("{}  COMMAND_HANDSHAKE(AND CLOSE) INVOKED OK", contextx_str(context));
+			}
+			context_ = context;
+		},
+		P2P_DEFAULT_HANDSHAKE_INVOKE_TIMEOUT);
 
 	if(r)
 	{
@@ -892,19 +918,12 @@ bool node_server<t_payload_net_handler>::try_to_connect_and_handshake_with_new_p
 	const epee::net_utils::ipv4_network_address &ipv4 = na.as<const epee::net_utils::ipv4_network_address>();
 
 	typename net_server::t_connection_context con = AUTO_VAL_INIT(con);
+	con.m_anchor = peer_type == anchor;
 	bool res = m_net_server.connect(epee::string_tools::get_ip_string_from_int32(ipv4.ip()),
 									epee::string_tools::num_to_string_fast(ipv4.port()),
 									m_config.m_net_config.connection_timeout,
 									con);
 
-	if(!res)
-	{
-		bool is_priority = is_priority_node(na);
-		GULPS_INFO( "{} {} Connect failed to {}", contextx_str(con), priority_str(is_priority), na.str()
-								   /*<< ", try " << try_count*/);
-		//m_peerlist.set_peer_unreachable(pe);
-		return false;
-	}
 
 	peerid_type pi = AUTO_VAL_INIT(pi);
 	res = do_handshake_with_peer(pi, con, just_take_peerlist);
@@ -955,6 +974,7 @@ bool node_server<t_payload_net_handler>::check_connection_and_handshake_with_pee
 	const epee::net_utils::ipv4_network_address &ipv4 = na.as<epee::net_utils::ipv4_network_address>();
 
 	typename net_server::t_connection_context con = AUTO_VAL_INIT(con);
+	con.m_anchor = false;
 	bool res = m_net_server.connect(epee::string_tools::get_ip_string_from_int32(ipv4.ip()),
 									epee::string_tools::num_to_string_fast(ipv4.port()),
 									m_config.m_net_config.connection_timeout,
@@ -1809,13 +1829,11 @@ bool node_server<t_payload_net_handler>::parse_peers_and_add_to_container(const 
 template <class t_payload_net_handler>
 bool node_server<t_payload_net_handler>::set_max_out_peers(const boost::program_options::variables_map &vm, int64_t max)
 {
-	if(max == -1)
-	{
-		m_config.m_net_config.max_out_connection_count = P2P_DEFAULT_CONNECTIONS_COUNT;
-		return true;
-	}
-	m_config.m_net_config.max_out_connection_count = max;
-	return true;
+    if(max == -1)
+      max = P2P_DEFAULT_CONNECTIONS_COUNT;
+    m_config.m_net_config.max_out_connection_count = max;
+    m_payload_handler.set_max_out_peers(max);
+    return true;
 }
 
 template <class t_payload_net_handler>
@@ -1943,6 +1961,8 @@ bool node_server<t_payload_net_handler>::gray_peerlist_housekeeping()
 	if(m_offline)
 		return true;
 	if(!m_exclusive_peers.empty())
+		return true;
+	if (m_payload_handler.needs_new_sync_connections())
 		return true;
 
 	peerlist_entry pe = AUTO_VAL_INIT(pe);

@@ -67,7 +67,7 @@ class PerformanceTimer
 	~PerformanceTimer();
 	void pause();
 	void resume();
-
+	void reset();
 	uint64_t value() const { return ticks; }
 
   protected:

@@ -123,10 +123,10 @@ struct connection_info
 /************************************************************************/
 struct block_complete_entry
 {
-	block_complete_entry(blobdata block, std::list<blobdata> txs) : block(block), txs(txs)  {}
+	block_complete_entry(blobdata block, std::vector<blobdata> txs) : block(block), txs(txs)  {}
 
 	blobdata block;
-	std::list<blobdata> txs;
+	std::vector<blobdata> txs;
 	BEGIN_KV_SERIALIZE_MAP(block_complete_entry)
 	KV_SERIALIZE(block)
 	KV_SERIALIZE(txs)
@@ -174,7 +174,7 @@ struct NOTIFY_NEW_TRANSACTIONS
 
 	struct request
 	{
-		std::list<blobdata> txs;
+		std::vector<blobdata> txs;
 
 		BEGIN_KV_SERIALIZE_MAP(request)
 		KV_SERIALIZE(txs)
@@ -190,8 +190,8 @@ struct NOTIFY_REQUEST_GET_OBJECTS
 
 	struct request
 	{
-		std::list<crypto::hash> txs;
-		std::list<crypto::hash> blocks;
+		std::vector<crypto::hash> txs;
+		std::vector<crypto::hash> blocks;
 
 		BEGIN_KV_SERIALIZE_MAP(request)
 		KV_SERIALIZE_CONTAINER_POD_AS_BLOB(txs)
@@ -206,9 +206,9 @@ struct NOTIFY_RESPONSE_GET_OBJECTS
 
 	struct request
 	{
-		std::list<blobdata> txs;
-		std::list<block_complete_entry> blocks;
-		std::list<crypto::hash> missed_ids;
+		std::vector<blobdata> txs;
+		std::vector<block_complete_entry> blocks;
+		std::vector<crypto::hash> missed_ids;
 		uint64_t current_blockchain_height;
 
 		BEGIN_KV_SERIALIZE_MAP(request)
@@ -258,7 +258,7 @@ struct NOTIFY_RESPONSE_CHAIN_ENTRY
 		uint64_t start_height;
 		uint64_t total_height;
 		uint64_t cumulative_difficulty;
-		std::list<crypto::hash> m_block_ids;
+		std::vector<crypto::hash> m_block_ids;
 
 		BEGIN_KV_SERIALIZE_MAP(request)
 		KV_SERIALIZE(start_height)

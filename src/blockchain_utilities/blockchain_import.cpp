@@ -177,7 +177,7 @@ int pop_blocks(cryptonote::core &core, int num_blocks)
 	return num_blocks;
 }
 
-int check_flush(cryptonote::core &core, std::list<block_complete_entry> &blocks, bool force)
+int check_flush(cryptonote::core &core, std::vector<block_complete_entry> &blocks, bool force)
 {
 	if(blocks.empty())
 		return 0;
@@ -189,7 +189,7 @@ int check_flush(cryptonote::core &core, std::list<block_complete_entry> &blocks,
 	if(!force && new_height % HASH_OF_HASHES_STEP)
 		return 0;
 
-	std::list<crypto::hash> hashes;
+	std::vector<crypto::hash> hashes;
 	for(const auto &b : blocks)
 	{
 		cryptonote::block block;
@@ -204,8 +204,18 @@ int check_flush(cryptonote::core &core, std::list<block_complete_entry> &blocks,
 	}
 	core.prevalidate_block_hashes(core.get_blockchain_storage().get_db().height(), hashes);
 
-	core.prepare_handle_incoming_blocks(blocks);
-
+	std::vector<block> pblocks;
+	if (!core.prepare_handle_incoming_blocks(blocks))
+	{
+		GULPS_ERROR("Failed to prepare to add blocks");
+		return 1;
+	}
+	if (!pblocks.empty() && pblocks.size() != blocks.size())
+	{
+		GULPS_ERROR("Unexpected parsed blocks size");
+		core.cleanup_handle_incoming_blocks();
+		return 1;
+	}
 	for(const block_complete_entry &block_entry : blocks)
 	{
 		// process transactions
@@ -321,7 +331,7 @@ int import_from_file(cryptonote::core &core, const std::string &import_file_path
 
 	GULPS_INFO("Reading blockchain from bootstrap file...\n");
 
-	std::list<block_complete_entry> blocks;
+	std::vector<block_complete_entry> blocks;
 
 	// Skip to start_height before we start adding.
 	{
@@ -444,7 +454,7 @@ int import_from_file(cryptonote::core &core, const std::string &import_file_path
 				{
 					cryptonote::blobdata block;
 					cryptonote::block_to_blob(bp.block, block);
-					std::list<cryptonote::blobdata> txs;
+					std::vector<cryptonote::blobdata> txs;
 					for(const auto &tx : bp.txs)
 					{
 						txs.push_back(cryptonote::blobdata());

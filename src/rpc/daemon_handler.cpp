@@ -67,7 +67,7 @@ void DaemonHandler::handle(const GetHeight::Request &req, GetHeight::Response &r
 
 void DaemonHandler::handle(const GetBlocksFast::Request &req, GetBlocksFast::Response &res)
 {
-	std::list<std::pair<blobdata, std::list<blobdata>>> blocks;
+	std::vector<std::pair<blobdata, std::vector<blobdata>>> blocks;
 
 	if(!m_core.find_blockchain_supplement(req.start_height, req.block_ids, blocks, res.current_height, res.start_height, COMMAND_RPC_GET_BLOCKS_FAST_MAX_COUNT))
 	{
@@ -106,7 +106,7 @@ void DaemonHandler::handle(const GetBlocksFast::Request &req, GetBlocksFast::Res
 			res.error_details = "incorrect number of transactions retrieved for block";
 			return;
 		}
-		std::list<transaction> txs;
+		std::vector<transaction> txs;
 		for(const auto &blob : it->second)
 		{
 			txs.resize(txs.size() + 1);
@@ -180,10 +180,10 @@ void DaemonHandler::handle(const GetHashesFast::Request &req, GetHashesFast::Res
 
 void DaemonHandler::handle(const GetTransactions::Request &req, GetTransactions::Response &res)
 {
-	std::list<cryptonote::transaction> found_txs;
-	std::list<crypto::hash> missed_hashes;
+	std::vector<cryptonote::transaction> found_txs_vec;
+	std::vector<crypto::hash> missed_vec;
 
-	bool r = m_core.get_transactions(req.tx_hashes, found_txs, missed_hashes);
+	bool r = m_core.get_transactions(req.tx_hashes, found_txs_vec, missed_vec);
 
 	// TODO: consider fixing core::get_transactions to not hide exceptions
 	if(!r)
@@ -193,16 +193,7 @@ void DaemonHandler::handle(const GetTransactions::Request &req, GetTransactions:
 		return;
 	}
 
-	size_t num_found = found_txs.size();
-
-	// std::list is annoying
-	std::vector<cryptonote::transaction> found_txs_vec{
-		std::make_move_iterator(std::begin(found_txs)),
-		std::make_move_iterator(std::end(found_txs))};
-
-	std::vector<crypto::hash> missed_vec{
-		std::make_move_iterator(std::begin(missed_hashes)),
-		std::make_move_iterator(std::end(missed_hashes))};
+	size_t num_found = found_txs_vec.size();
 
 	std::vector<uint64_t> heights(num_found);
 	std::vector<bool> in_pool(num_found, false);
@@ -217,7 +208,7 @@ void DaemonHandler::handle(const GetTransactions::Request &req, GetTransactions:
 	// if any missing from blockchain, check in tx pool
 	if(!missed_vec.empty())
 	{
-		std::list<cryptonote::transaction> pool_txs;
+		std::vector<cryptonote::transaction> pool_txs;
 
 		m_core.get_pool_transactions(pool_txs);
 

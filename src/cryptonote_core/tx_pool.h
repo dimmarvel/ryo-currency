@@ -258,7 +258,7 @@ class tx_memory_pool : boost::noncopyable
      * @param include_unrelayed_txes include unrelayed txes in the result
      *
      */
-	void get_transactions(std::list<transaction> &txs, bool include_unrelayed_txes = true) const;
+	void get_transactions(std::vector<transaction> &txs, bool include_unrelayed_txes = true) const;
 
 	/**
      * @brief get a list of all transaction hashes in the pool
@@ -345,14 +345,14 @@ class tx_memory_pool : boost::noncopyable
      *
      * @return true
      */
-	bool get_relayable_transactions(std::list<std::pair<crypto::hash, cryptonote::blobdata>> &txs) const;
+	bool get_relayable_transactions(std::vector<std::pair<crypto::hash, cryptonote::blobdata>> &txs) const;
 
 	/**
      * @brief tell the pool that certain transactions were just relayed
      *
      * @param txs the list of transactions (and their hashes)
      */
-	void set_relayed(const std::list<std::pair<crypto::hash, cryptonote::blobdata>> &txs);
+	void set_relayed(const std::vector<std::pair<crypto::hash, cryptonote::blobdata>> &txs);
 
 	/**
      * @brief get the total number of transactions in the pool

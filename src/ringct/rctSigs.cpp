@@ -91,6 +91,7 @@ bool verBulletproof(const Bulletproof &proof)
 {
 	try
 	{
+		printf("----> verify proofs 4\n");
 		return bulletproof_VERIFY(proof);
 	}
 	// we can get deep throws from ge_frombytes_vartime if input isn't valid
@@ -104,6 +105,7 @@ bool verBulletproof(const std::vector<const Bulletproof *> &proofs)
 {
 	try
 	{
+		printf("----> verify proofs 3\n");
 		return bulletproof_VERIFY(proofs);
 	}
 	// we can get deep throws from ge_frombytes_vartime if input isn't valid
@@ -966,7 +968,7 @@ bool verRct(const rctSig &rv, bool semantics)
 		if(semantics)
 		{
 			tools::threadpool &tpool = tools::threadpool::getInstance();
-			tools::threadpool::waiter waiter;
+			tools::threadpool::waiter waiter(tpool);
 			std::deque<bool> results(rv.outPk.size(), false);
 			DP("range proofs verified?");
 			for(size_t i = 0; i < rv.outPk.size(); i++)
@@ -1020,7 +1022,7 @@ bool verRctSemanticsSimple(const std::vector<const rctSig *> &rvv)
 		PERF_TIMER(verRctSemanticsSimple);
 
 		tools::threadpool &tpool = tools::threadpool::getInstance();
-		tools::threadpool::waiter waiter;
+		tools::threadpool::waiter waiter(tpool);
 		std::deque<bool> results;
 		std::vector<const Bulletproof *> proofs;
 		size_t max_non_bp_proofs = 0, offset = 0;
@@ -1147,7 +1149,7 @@ bool verRctNonSemanticsSimple(const rctSig &rv)
 
 		std::deque<bool> results(threads);
 		tools::threadpool &tpool = tools::threadpool::getInstance();
-		tools::threadpool::waiter waiter;
+		tools::threadpool::waiter waiter(tpool);
 
 		const keyV &pseudoOuts = bulletproof ? rv.p.pseudoOuts : rv.pseudoOuts;
 
