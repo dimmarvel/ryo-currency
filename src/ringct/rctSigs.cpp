@@ -91,7 +91,7 @@ bool verBulletproof(const Bulletproof &proof)
 {
 	try
 	{
-		printf("----> verify proofs 4\n");
+		GULPS_ERROR("----> verify proofs 4\n");
 		return bulletproof_VERIFY(proof);
 	}
 	// we can get deep throws from ge_frombytes_vartime if input isn't valid
@@ -105,7 +105,7 @@ bool verBulletproof(const std::vector<const Bulletproof *> &proofs)
 {
 	try
 	{
-		printf("----> verify proofs 3\n");
+		GULPS_ERROR("----> verify proofs 3\n");
 		return bulletproof_VERIFY(proofs);
 	}
 	// we can get deep throws from ge_frombytes_vartime if input isn't valid

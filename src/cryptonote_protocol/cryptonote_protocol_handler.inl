@@ -1102,13 +1102,12 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 				uint64_t start_height;
 				std::vector<cryptonote::block_complete_entry> blocks;
 				boost::uuids::uuid span_connection_id;
-                epee::net_utils::network_address span_origin;
-          		if (!m_block_queue.get_next_span(start_height, blocks, span_connection_id, span_origin))
+				epee::net_utils::network_address span_origin;
+				if (!m_block_queue.get_next_span(start_height, blocks, span_connection_id, span_origin))
 				{
 					GULPS_LOG_L1( context_str," no next span found, going back to download");
 					break;
 				}
-				GULPSF_LOG_L1("{} next span in the queue has blocks {}-{}, we need {}", context_str, start_height , (start_height + blocks.size() - 1) , previous_height);
 
 				if(blocks.empty())
 				{
@@ -1117,10 +1116,12 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 					break;
 				}
 
+				GULPSF_LOG_L1("{} next span in the queue has blocks {}-{}, we need {}", context_str, start_height , (start_height + blocks.size() - 1) , previous_height);
+
 				block new_block;
-				if(!parse_and_validate_block_from_blob(blocks.front().block, new_block))
+				if (!parse_and_validate_block_from_blob(blocks.back().block, new_block))
 				{
-					GULPS_ERROR("Failed to parse block, but it should already have been parsed");
+					GULPSF_ERROR("{} Failed to parse block, but it should already have been parsed front", context_str);
 					m_block_queue.remove_spans(span_connection_id, start_height);
 					continue;
 				}
@@ -1133,6 +1134,13 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 						context_str, start_height, (subchain_height-1), m_core.get_current_blockchain_height());
 					m_block_queue.remove_spans(span_connection_id, start_height);
 					++m_sync_old_spans_downloaded;
+					continue;
+				}
+
+				if(!parse_and_validate_block_from_blob(blocks.front().block, new_block))
+				{
+					GULPSF_ERROR("{} Failed to parse block, but it should already have been parsed back", context_str);
+					m_block_queue.remove_spans(span_connection_id, start_height);
 					continue;
 				}
 
@@ -1162,7 +1170,7 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 
 							GULPS_LOG_L1(context_str, 
 								"Back to downloading: received block with unknown parent, which was not requested, but peer does not have that block.");
-
+							GULPS_ERROR("SKIP1");
 							goto skip;
 						}
 
@@ -1172,6 +1180,7 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 						m_block_queue.remove_spans(span_connection_id, start_height);
 						context.m_needed_objects.clear();
 						context.m_last_response_height = 0;
+						GULPS_ERROR("SKIP2");
 						goto skip;
 					}
 
@@ -1193,7 +1202,6 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 					}
 				}
 
-				std::vector<block> pblocks;
 				if (!m_core.prepare_handle_incoming_blocks(blocks))
 				{
 					GULPS_ERROR("Failure in prepare_handle_incoming_blocks");
@@ -1201,15 +1209,9 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 					return 1;
 				}
 
-				if (!pblocks.empty() && pblocks.size() != blocks.size())
-				{
-					m_core.cleanup_handle_incoming_blocks();
-					GULPS_ERROR("Internal error: blocks.size() != block_entry.txs.size()");
-					return 1;
-				}
-
 				uint64_t block_process_time_full = 0, transactions_process_time_full = 0;
 				size_t num_txs = 0;
+				GULPSF_LOG_ERROR("------> tx_verification_context size - {}\n", blocks.size());
 				for(const block_complete_entry &block_entry : blocks)
 				{
 					if(m_stopping)
@@ -1222,8 +1224,8 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 					TIME_MEASURE_START(transactions_process_time);
 					num_txs += block_entry.txs.size();
 					std::vector<tx_verification_context> tvc;
-					printf("------> %ld\n", tvc.size());
 					m_core.handle_incoming_txs(block_entry.txs, tvc, true, true, false);
+					GULPSF_LOG_ERROR("------> tx_verification_context size - {}\n", tvc.size());
 					if(tvc.size() != block_entry.txs.size())
 					{
 						GULPS_ERROR( context_str, " Internal error: tvc.size() != block_entry.txs.size()");
@@ -1237,6 +1239,7 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 							if(!m_p2p->for_connection(span_connection_id, [&](cryptonote_connection_context &context, nodetool::peerid_type peer_id, uint32_t f) -> bool {
 								cryptonote::transaction tx;
 								parse_and_validate_tx_from_blob(*it, tx); // must succeed if we got here
+								GULPSF_LOG_ERROR("------> IN tx_verification_context size - {} now i = {}}\n", tvc.size(), i);
 								GULPSF_LOG_ERROR("{} transaction verification failed on NOTIFY_RESPONSE_GET_OBJECTS, tx_id = {}, dropping connection",
 									context_str, epee::string_tools::pod_to_hex(cryptonote::get_transaction_hash(tx)) );
 								drop_connection(context, false, true);

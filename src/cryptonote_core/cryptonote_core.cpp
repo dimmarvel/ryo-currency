@@ -647,8 +647,6 @@ bool core::handle_incoming_txs(const std::vector<blobdata> &tx_blobs, std::vecto
 		cryptonote::transaction tx;
 		crypto::hash hash;
 		crypto::hash prefix_hash;
-		bool in_txpool;
-		bool in_blockchain;
 	};
 	std::vector<result> results(tx_blobs.size());
 

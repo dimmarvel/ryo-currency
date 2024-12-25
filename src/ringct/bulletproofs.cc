@@ -1226,7 +1226,7 @@ bool bulletproof_VERIFY(const std::vector<Bulletproof> &proofs)
 	proof_pointers.reserve(proofs.size());
 	for(const Bulletproof &proof : proofs)
 		proof_pointers.push_back(&proof);
-	printf("----> verify proofs 2\n");
+	GULPS_ERROR("----> verify proofs 2\n");
 	return bulletproof_VERIFY(proof_pointers);
 }
 
@@ -1234,7 +1234,7 @@ bool bulletproof_VERIFY(const Bulletproof &proof)
 {
 	std::vector<const Bulletproof *> proofs;
 	proofs.push_back(&proof);
-	printf("----> verify proofs 1\n");
+	GULPS_ERROR("----> verify proofs 1\n");
 	return bulletproof_VERIFY(proofs);
 }
 }

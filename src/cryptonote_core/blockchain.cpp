@@ -3543,6 +3543,7 @@ bool Blockchain::handle_block_to_main_chain(const block &bl, const crypto::hash 
 	if(bl.prev_id != get_tail_id())
 	{
 		GULPSF_VERIFY_ERR_BLK("Block with id: {}\nhas wrong prev_id: {}\nexpected: {}", id, bl.prev_id, get_tail_id());
+		bvc.m_verifivation_failed = true;
 	leave:
 		m_db->block_txn_stop();
 		return false;
@@ -3850,7 +3851,7 @@ bool Blockchain::handle_block_to_main_chain(const block &bl, const crypto::hash 
 		}
 		catch(const KEY_IMAGE_EXISTS &e)
 		{
-		GULPSF_LOG_ERROR("Error adding block with hash: {} to blockchain, what = {}", id , e.what());
+			GULPSF_LOG_ERROR("Error adding block with hash: {} to blockchain, what = {}", id , e.what());
 			bvc.m_verifivation_failed = true;
 			return_tx_to_pool(txs);
 			return false;
@@ -3858,7 +3859,8 @@ bool Blockchain::handle_block_to_main_chain(const block &bl, const crypto::hash 
 		catch(const std::exception &e)
 		{
 			//TODO: figure out the best way to deal with this failure
-		GULPSF_LOG_ERROR("Error adding block with hash: {} to blockchain, what = {}", id , e.what());
+			GULPSF_LOG_ERROR("Error adding block with hash: {} to blockchain, what = {}", id , e.what());
+			bvc.m_verifivation_failed = true;
 			return_tx_to_pool(txs);
 			return false;
 		}
