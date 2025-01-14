@@ -584,7 +584,7 @@ bool core::handle_incoming_tx_pre(const blobdata &tx_blob, tx_verification_conte
 			if(bad_sematic_tx->second > BAD_SEMANTICS_TXES_MAX_TRIES)
 			{
 				bad_semantics_txes_lock.unlock();
-
+				GULPS_LOG_L1("Transaction already seen with bad semantics, rejected");
 				tvc.m_verifivation_failed = true;
 				return false;
 			}

@@ -53,8 +53,6 @@ extern "C" {
 #include "bulletproofs.h"
 #include "multiexp.h"
 #include "rctOps.h"
-#include <iomanip>
-#include <sstream>
 
 #define DEBUG_BP
 
@@ -937,34 +935,6 @@ Bulletproof bulletproof_PROVE(const std::vector<uint64_t> &v, const rct::keyV &g
 	return bulletproof_PROVE(sv, gamma);
 }
 
-std::string key_to_hex(const key &k) {
-    std::ostringstream oss;
-    for (unsigned char byte : k.bytes) {
-        oss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(byte);
-    }
-    return oss.str();
-}
-
-std::string fe_to_string(const fe &f) {
-    std::ostringstream oss;
-    oss << "[";
-    for (int i = 0; i < 10; ++i) {
-        oss << f[i];
-        if (i < 9) {
-            oss << ", ";
-        }
-    }
-    oss << "]";
-    return oss.str();
-}
-
-std::string ge_p3_to_string(const ge_p3 &point) {
-    return "X: " + fe_to_string(point.X) + ", " +
-           "Y: " + fe_to_string(point.Y) + ", " +
-           "Z: " + fe_to_string(point.Z) + ", " +
-           "T: " + fe_to_string(point.T);
-}
-
 /* Given a range proof, determine if it is valid */
 bool bulletproof_VERIFY(const std::vector<const Bulletproof *> &proofs)
 {
@@ -1187,10 +1157,6 @@ bool bulletproof_VERIFY(const std::vector<const Bulletproof *> &proofs)
 	if(!ge_p3_is_point_at_infinity(&check1))
 	{
 		GULPS_ERROR("Verification failure at step 1");
-		GULPSF_ERROR("Y2: {} , Y3: {} , Y4: {}", key_to_hex(Y2), key_to_hex(Y3), key_to_hex(Y4));
-		GULPSF_ERROR("y0:  {}, y1: {}", key_to_hex(y0), key_to_hex(y1));
-		GULPSF_ERROR("Aggregated check1: {}", ge_p3_to_string(check1));
-
 		return false;
 	}
 	ge_p3 check2;
@@ -1226,7 +1192,7 @@ bool bulletproof_VERIFY(const std::vector<Bulletproof> &proofs)
 	proof_pointers.reserve(proofs.size());
 	for(const Bulletproof &proof : proofs)
 		proof_pointers.push_back(&proof);
-	GULPS_ERROR("----> verify proofs 2\n");
+	
 	return bulletproof_VERIFY(proof_pointers);
 }
 
@@ -1234,7 +1200,6 @@ bool bulletproof_VERIFY(const Bulletproof &proof)
 {
 	std::vector<const Bulletproof *> proofs;
 	proofs.push_back(&proof);
-	GULPS_ERROR("----> verify proofs 1\n");
 	return bulletproof_VERIFY(proofs);
 }
 }

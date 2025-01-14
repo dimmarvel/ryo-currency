@@ -784,7 +784,6 @@ bool sha256sum(const std::string &filename, crypto::hash &hash)
 	return true;
 }
 
-
 std::string get_human_readable_timespan(uint64_t seconds)
 {
 	if (seconds < 60)
