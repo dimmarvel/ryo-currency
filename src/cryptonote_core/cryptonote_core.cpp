@@ -79,6 +79,7 @@ GULPS_CAT_MAJOR("crtnte_core");
 DISABLE_VS_WARNINGS(4355)
 
 #define BAD_SEMANTICS_TXES_MAX_SIZE 100
+#define BAD_SEMANTICS_TXES_MAX_TRIES 3
 
 namespace cryptonote
 {
@@ -577,12 +578,16 @@ bool core::handle_incoming_tx_pre(const blobdata &tx_blob, tx_verification_conte
 	bad_semantics_txes_lock.lock();
 	for(int idx = 0; idx < 2; ++idx)
 	{
-		if(bad_semantics_txes[idx].find(tx_hash) != bad_semantics_txes[idx].end())
+		auto bad_sematic_tx = bad_semantics_txes[idx].find(tx_hash);
+		if(bad_sematic_tx != bad_semantics_txes[idx].end())
 		{
-			bad_semantics_txes_lock.unlock();
-			GULPS_LOG_L1("Transaction already seen with bad semantics, rejected");
-			tvc.m_verifivation_failed = true;
-			return false;
+			if(bad_sematic_tx->second > BAD_SEMANTICS_TXES_MAX_TRIES)
+			{
+				bad_semantics_txes_lock.unlock();
+
+				tvc.m_verifivation_failed = true;
+				return false;
+			}
 		}
 	}
 	bad_semantics_txes_lock.unlock();
@@ -623,8 +628,8 @@ bool core::handle_incoming_tx_post(const blobdata &tx_blob, tx_verification_cont
 		GULPSF_LOG_L1("WRONG TRANSACTION BLOB, Failed to check tx {} semantic, rejected", tx_hash );
 		tvc.m_verifivation_failed = true;
 		bad_semantics_txes_lock.lock();
-		bad_semantics_txes[0].insert(tx_hash);
-		if(bad_semantics_txes[0].size() >= BAD_SEMANTICS_TXES_MAX_SIZE)
+		bad_semantics_txes[0][tx_hash]++;
+		if (bad_semantics_txes[0].size() >= BAD_SEMANTICS_TXES_MAX_SIZE)
 		{
 			std::swap(bad_semantics_txes[0], bad_semantics_txes[1]);
 			bad_semantics_txes[0].clear();

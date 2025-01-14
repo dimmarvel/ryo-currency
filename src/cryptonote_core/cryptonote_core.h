@@ -887,6 +887,8 @@ class core : public i_miner_handler
       */
 	bool check_tx_semantic(const transaction &tx, bool keeped_by_block) const;
 
+	void set_semantics_failed(const crypto::hash &tx_hash);
+
 	bool handle_incoming_tx_pre(const blobdata &tx_blob, tx_verification_context &tvc, cryptonote::transaction &tx, crypto::hash &tx_hash, crypto::hash &tx_prefixt_hash, bool keeped_by_block, bool relayed, bool do_not_relay);
 	bool handle_incoming_tx_post(const blobdata &tx_blob, tx_verification_context &tvc, cryptonote::transaction &tx, crypto::hash &tx_hash, crypto::hash &tx_prefixt_hash, bool keeped_by_block, bool relayed, bool do_not_relay);
 
@@ -1011,7 +1013,7 @@ class core : public i_miner_handler
 
 	time_t start_time;
 
-	std::unordered_set<crypto::hash> bad_semantics_txes[2];
+	std::unordered_map<crypto::hash, uint32_t> bad_semantics_txes[2];
 	boost::mutex bad_semantics_txes_lock;
 
 	tools::threadpool &m_threadpool;
