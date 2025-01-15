@@ -1170,7 +1170,6 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 
 							GULPS_LOG_L1(context_str, 
 								"Back to downloading: received block with unknown parent, which was not requested, but peer does not have that block.");
-							GULPS_ERROR("SKIP1");
 							goto skip;
 						}
 
@@ -1180,7 +1179,6 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 						m_block_queue.remove_spans(span_connection_id, start_height);
 						context.m_needed_objects.clear();
 						context.m_last_response_height = 0;
-						GULPS_ERROR("SKIP2");
 						goto skip;
 					}
 
@@ -1211,7 +1209,6 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 
 				uint64_t block_process_time_full = 0, transactions_process_time_full = 0;
 				size_t num_txs = 0;
-				GULPSF_LOG_ERROR("------> tx_verification_context size - {}\n", blocks.size());
 				for(const block_complete_entry &block_entry : blocks)
 				{
 					if(m_stopping)
@@ -1225,7 +1222,6 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 					num_txs += block_entry.txs.size();
 					std::vector<tx_verification_context> tvc;
 					m_core.handle_incoming_txs(block_entry.txs, tvc, true, true, false);
-					GULPSF_LOG_ERROR("------> tx_verification_context size - {}\n", tvc.size());
 					if(tvc.size() != block_entry.txs.size())
 					{
 						GULPS_ERROR( context_str, " Internal error: tvc.size() != block_entry.txs.size()");
@@ -1239,7 +1235,6 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 							if(!m_p2p->for_connection(span_connection_id, [&](cryptonote_connection_context &context, nodetool::peerid_type peer_id, uint32_t f) -> bool {
 								cryptonote::transaction tx;
 								parse_and_validate_tx_from_blob(*it, tx); // must succeed if we got here
-								GULPSF_LOG_ERROR("------> IN tx_verification_context size - {} now i = {}}\n", tvc.size(), i);
 								GULPSF_LOG_ERROR("{} transaction verification failed on NOTIFY_RESPONSE_GET_OBJECTS, tx_id = {}, dropping connection",
 									context_str, epee::string_tools::pod_to_hex(cryptonote::get_transaction_hash(tx)) );
 								drop_connection(context, false, true);
@@ -1272,7 +1267,7 @@ int t_cryptonote_protocol_handler<t_core>::try_add_next_blocks(cryptonote_connec
 						drop_connections(span_origin);
 						if(!m_p2p->for_connection(span_connection_id, [&](cryptonote_connection_context &context, nodetool::peerid_type peer_id, uint32_t f) -> bool {
 							GULPS_INFO( context_str, " Block verification failed, dropping connection");
-								drop_connection_with_score(context, bvc.m_bad_pow ? P2P_IP_FAILS_BEFORE_BLOCK : 1, true);
+							drop_connection_with_score(context, bvc.m_bad_pow ? P2P_IP_FAILS_BEFORE_BLOCK : 1, true);
 							return 1;
 						}))
 						GULPS_ERROR( context_str, " span connection id not found");
@@ -1737,8 +1732,6 @@ bool t_cryptonote_protocol_handler<t_core>::request_missing_objects(cryptonote_c
 
 			const uint64_t first_block_height = context.m_last_response_height - context.m_needed_objects.size() + 1;
 			static const uint64_t bp_fork_height = m_core.get_earliest_ideal_height_for_version(8);
-			printf("---> request_missing_objects m_block_queue.reserve_span(first_block_height, context.m_last_response_height, count_limit) %ld, %ld, %ld\n",
-				first_block_height, context.m_last_response_height, count_limit);
 			span = m_block_queue.reserve_span(first_block_height, context.m_last_response_height, count_limit, 
 				context.m_connection_id, context.m_remote_address, context.m_remote_blockchain_height, context.m_needed_objects);
 

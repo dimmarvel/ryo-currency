@@ -292,7 +292,6 @@ std::pair<uint64_t, uint64_t> block_queue::reserve_span(uint64_t first_block_hei
 	}
 
 	GULPSF_LOG_L1("Reserving span {} - {} for {}", span_start_height, (span_start_height + span_length - 1), boost::uuids::to_string(connection_id));
-	printf("---> reserve_span span_start_height, span_length %ld, %ld\n", span_start_height, span_length);
 	add_blocks(span_start_height, span_length, connection_id, addr, time);
 	set_span_hashes(span_start_height, connection_id, hashes);
 	
