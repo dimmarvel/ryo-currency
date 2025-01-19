@@ -222,13 +222,22 @@ inline void rand(size_t N, uint8_t *bytes)
 
 /* Generate a value filled with random bytes.
    */
-template <typename T>
-typename std::enable_if<std::is_pod<T>::value, T>::type rand()
-{
+  
+template<typename T>
+T rand() {
+	static_assert(std::is_standard_layout_v<T>, "cannot write random bytes into non-standard layout type");
+	static_assert(std::is_trivially_copyable_v<T>, "cannot write random bytes into non-trivially copyable type");
 	typename std::remove_cv<T>::type res;
 	prng::inst().generate_random(&res, sizeof(T));
 	return res;
 }
+// template <typename T>
+// typename std::enable_if<std::is_pod<T>::value, T>::type rand()
+// {
+// 	typename std::remove_cv<T>::type res;
+// 	prng::inst().generate_random(&res, sizeof(T));
+// 	return res;
+// }
 
 void generate_wallet_keys(public_key &pub, secret_key &sec, const secret_key_16 &wallet_secret, uint32_t key_variant);
 void generate_wallet_secret(secret_key_16 &wallet_secret);

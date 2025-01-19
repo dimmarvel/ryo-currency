@@ -145,16 +145,12 @@ bool connection<t_protocol_handler>::start(bool is_income, bool is_multithreaded
 	GULPS_CHECK_AND_NO_ASSERT_MES(!ec, false, "Failed to get local endpoint: " , ec.message() , ":" , ec.value());
 
 	context = boost::value_initialized<t_connection_context>();
-	auto ip_bytes = remote_ep.address().to_v4().to_bytes();
-	uint32_t ip_ = (static_cast<uint32_t>(ip_bytes[0]) << 24) |
-				(static_cast<uint32_t>(ip_bytes[1]) << 16) |
-				(static_cast<uint32_t>(ip_bytes[2]) << 8)  |
-				static_cast<uint32_t>(ip_bytes[3]);
+	const unsigned long ip_{remote_ep.address().to_v4().to_uint()};
 	m_local = epee::net_utils::is_ip_loopback(ip_);
 
 	// create a random uuid
 	// that stuff turns out to be included, even though it's from src... Taking advantage
-	boost::uuids::uuid random_uuid = boost::uuids::random_generator()();
+	boost::uuids::uuid random_uuid = crypto::rand<boost::uuids::uuid>();
 
 	context.set_details(random_uuid, epee::net_utils::ipv4_network_address(ip_, remote_ep.port()), is_income);
 	GULPS_LOG_L3("[sock ", socket_.native_handle(), "] new connection from ", print_connection_context_short(context), " to ", local_ep.address().to_string(), ":", local_ep.port(), ", total sockets objects ", &m_ref_sock_count);
@@ -204,7 +200,6 @@ bool connection<t_protocol_handler>::request_callback()
 	if(!self)
 		return false;
 	boost::asio::post(strand_, [this]() {
-		// Ваш код обработки, например вызов обработчика
 		this->call_back_starter();
     });
 	GULPS_CATCH_ENTRY_L0("connection<t_protocol_handler>::request_callback()", false);
