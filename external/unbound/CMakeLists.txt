@@ -26,7 +26,7 @@
 # STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 # THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-cmake_minimum_required(VERSION 2.8.7)
+cmake_minimum_required(VERSION 3.26.0)
 
 project(unbound C)
 
@@ -37,6 +37,7 @@ include(configure_checks.cmake)
 if (WIN32)
   set(USE_MINI_EVENT 1)
   set(USE_WINSOCK 1)
+  set(HAVE_EVP_MD_CTX_NEW 1)
 else ()
   find_package(PkgConfig REQUIRED)
   set(USE_MINI_EVENT 1)
@@ -225,11 +226,12 @@ endif ()
 if (MINGW)
   # There is no variable for this (probably due to the fact that the pthread
   # library is implicit with a link in msys).
-  set(CMAKE_FIND_LIBRARY_SUFFIXES .dll ${CMAKE_FIND_LIBRARY_SUFFIXES})
-  find_library(win32pthread
-    NAMES winpthread-1 libwinpthread-1.dll
-    HINTS "C:\\msys64\\mingw64\\bin")
-  foreach (input IN LISTS win32pthread OPENSSL_LIBRARIES)
+  find_library(
+      win32pthread
+      NAMES libwinpthread-1.dll
+      HINTS /mingw64/bin
+    )
+  foreach (input IN LISTS OPENSSL_LIBRARIES)
     # Copy shared libraries into the build tree so that no PATH manipulation is
     # necessary.
     get_filename_component(name "${input}" NAME)

@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <memory>
 #include <type_traits>
+#include <boost/uuid/uuid.hpp>
 
 namespace epee
 {
@@ -119,6 +120,11 @@ span<const std::uint8_t> to_byte_span(const span<const T> src) noexcept
 {
 	static_assert(!has_padding<T>(), "source type may have padding");
 	return {reinterpret_cast<const std::uint8_t *>(src.data()), src.size_bytes()};
+}
+
+template <>
+constexpr bool has_padding<boost::uuids::uuid>() noexcept {
+	return false;
 }
 
 //! \return `span<const std::uint8_t>` which represents the bytes at `&src`.
