@@ -128,7 +128,8 @@ class blocked_mode_client
 			boost::system::error_code ec;
 
 			// resolve the address
-			auto results = resolver.resolve(addr, port, ec);
+			auto results = resolver.resolve(
+				boost::asio::ip::tcp::v4(), addr, port, boost::asio::ip::tcp::resolver::canonical_name, ec);
 			if (ec || results.empty()) {
 				GULPSF_LOG_ERROR("Failed to resolve {}: {} ({})", addr, ec.message(), ec.value());
 				return false;
@@ -139,12 +140,14 @@ class blocked_mode_client
 			//boost::asio::ip::tcp::endpoint remote_endpoint(boost::asio::ip::address::from_string(addr.c_str()), port);
         	boost::asio::ip::tcp::endpoint remote_endpoint = *results.begin();
 			m_ssl_socket.next_layer().open(remote_endpoint.protocol(), ec);
-			if (ec) {
-				GULPSF_LOG_ERROR("Failed to open socket: {}", ec.message());
-				return false;
+			if(bind_ip != "0.0.0.0" && bind_ip != "0" && bind_ip != "")
+			{
+				boost::asio::ip::tcp::endpoint local_endpoint(boost::asio::ip::make_address(addr), 0);
+				m_ssl_socket.next_layer().bind(local_endpoint);
 			}
 
 			m_deadline.expires_after(timeout);
+			ec = boost::asio::error::would_block;
 
 			m_ssl_socket.next_layer().async_connect(remote_endpoint, boost::lambda::var(ec) = boost::lambda::_1);
 			while(ec == boost::asio::error::would_block)

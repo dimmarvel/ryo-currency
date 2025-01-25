@@ -705,7 +705,7 @@ bool is_local_address(const std::string &address)
     {
         if(ep.endpoint().address().is_loopback())
         {
-            GULPSF_LOG_L0("Address '{}' is local",  address );
+            GULPSF_LOG_L0("Address '{}' is local",  address);
             return true;
         }
     }

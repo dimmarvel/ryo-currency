@@ -145,7 +145,7 @@ bool connection<t_protocol_handler>::start(bool is_income, bool is_multithreaded
 	GULPS_CHECK_AND_NO_ASSERT_MES(!ec, false, "Failed to get local endpoint: " , ec.message() , ":" , ec.value());
 
 	context = boost::value_initialized<t_connection_context>();
-	const unsigned long ip_{remote_ep.address().to_v4().to_uint()};
+	const unsigned long ip_{boost::asio::detail::socket_ops::host_to_network_long(remote_ep.address().to_v4().to_uint())};
 	m_local = epee::net_utils::is_ip_loopback(ip_);
 
 	// create a random uuid
@@ -199,8 +199,9 @@ bool connection<t_protocol_handler>::request_callback()
 	auto self = safe_shared_from_this();
 	if(!self)
 		return false;
-	boost::asio::post(strand_, [this]() {
-		this->call_back_starter();
+
+	boost::asio::post(strand_, [self]() {
+		self->call_back_starter();
     });
 	GULPS_CATCH_ENTRY_L0("connection<t_protocol_handler>::request_callback()", false);
 	return true;
@@ -787,8 +788,8 @@ bool boosted_tcp_server<t_protocol_handler>::init_server(uint32_t port, const st
 	m_address = address;
 	// Open the acceptor with the option to reuse the address (i.e. SO_REUSEADDR).
 	boost::asio::ip::tcp::resolver resolver(io_context_);
-    boost::asio::ip::tcp::resolver::results_type endpoints = resolver.resolve(address, std::to_string(port));
-    boost::asio::ip::tcp::endpoint endpoint = *endpoints.begin(); // Use the first resolved endpoint
+    boost::asio::ip::tcp::resolver::results_type endpoints = resolver.resolve(address, std::to_string(port), boost::asio::ip::tcp::resolver::canonical_name);
+    boost::asio::ip::tcp::endpoint endpoint = *endpoints.begin();
 
 	acceptor_.open(endpoint.protocol());
 	acceptor_.set_option(boost::asio::ip::tcp::acceptor::reuse_address(true));
@@ -1039,7 +1040,8 @@ bool boosted_tcp_server<t_protocol_handler>::connect(const std::string &adr, con
     boost::system::error_code ec;
 
     // Resolve the endpoint using the resolver
-    auto endpoints = resolver.resolve(adr, port, ec);
+    auto endpoints = resolver.resolve(
+		boost::asio::ip::tcp::v4(), adr, port, boost::asio::ip::tcp::resolver::canonical_name, ec);
 	if (ec)
 	{
         GULPSF_ERROR("Failed to resolve {}: {}, error: {}", adr, port, ec.message());
@@ -1048,7 +1050,7 @@ bool boosted_tcp_server<t_protocol_handler>::connect(const std::string &adr, con
 	//////////////////////////////////////////////////////////////////////////
 
 	//boost::asio::ip::tcp::endpoint remote_endpoint(boost::asio::ip::address::from_string(addr.c_str()), port);
-    boost::asio::ip::tcp::endpoint remote_endpoint = *endpoints.begin(); // изменено: получение первого endpoint
+    boost::asio::ip::tcp::endpoint remote_endpoint = *endpoints.begin();
 	if (ec) {
         GULPSF_ERROR("Failed to open socket: {}", ec.message());
         return false;
@@ -1057,7 +1059,7 @@ bool boosted_tcp_server<t_protocol_handler>::connect(const std::string &adr, con
 	sock_.open(remote_endpoint.protocol(), ec);
 	if(bind_ip != "0.0.0.0" && bind_ip != "0" && bind_ip != "")
 	{
-		boost::asio::ip::tcp::endpoint local_endpoint(boost::asio::ip::make_address(bind_ip, ec), 0);
+		boost::asio::ip::tcp::endpoint local_endpoint(boost::asio::ip::make_address(adr, ec), 0);
         if (ec) {
             GULPSF_ERROR("Failed to parse bind IP: {}", ec.message());
             return false;
@@ -1072,7 +1074,7 @@ bool boosted_tcp_server<t_protocol_handler>::connect(const std::string &adr, con
 	/*
     NOTICE: be careful to make sync connection from event handler: in case if all threads suddenly do sync connect, there will be no thread to dispatch events from io service.
     */
-
+   	ec = boost::asio::error::would_block;
 	//have another free thread(s), work in wait mode, without event handling
 	struct local_async_context
 	{
@@ -1159,7 +1161,8 @@ bool boosted_tcp_server<t_protocol_handler>::connect_async(const std::string &ad
 	//////////////////////////////////////////////////////////////////////////
     boost::asio::ip::tcp::resolver resolver(io_context_);
     boost::system::error_code ec;
-    auto results = resolver.resolve(adr, port, ec);
+    auto results = resolver.resolve(
+		boost::asio::ip::tcp::v4(), adr, port, boost::asio::ip::tcp::resolver::canonical_name, ec);
     if (ec || results.empty()) 
 	{
         GULPSF_ERROR("Failed to resolve {}: {} ({})", adr, ec.message(), ec.value());
