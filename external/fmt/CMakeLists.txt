@@ -61,7 +61,6 @@ include(cxx14)
 include(CheckCXXCompilerFlag)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-  message("------GNBUUUUUUUUUUUUUUUUUUU")
   set(PEDANTIC_COMPILE_FLAGS -pedantic-errors -Wall -Wextra -pedantic
       -Wold-style-cast -Wfloat-equal -Wlogical-op -Wundef
       -Wredundant-decls -Wshadow -Wwrite-strings -Wpointer-arith

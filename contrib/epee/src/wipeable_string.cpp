@@ -26,10 +26,22 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include "common/gulps.hpp"
 #include "wipeable_string.h"
 #include "memwipe.h"
-#include "common/gulps.hpp"
 #include <string.h>
+
+static constexpr const char hex[] = u8"0123456789abcdef";
+
+namespace
+{
+  int atolower(int c)
+  {
+    if (c >= 'A' && c <= 'Z')
+      c |= 32;
+    return c;
+  }
+}
 
 namespace epee
 {
@@ -108,9 +120,63 @@ void wipeable_string::push_back(char c)
 	buffer.back() = c;
 }
 
-void wipeable_string::pop_back()
+void wipeable_string::append(const char *ptr, size_t len)
 {
-	resize(size() - 1);
+	const size_t orgsz = size();
+	grow(orgsz + len);
+	if (len > 0)
+		memcpy(data() + orgsz, ptr, len);
+}
+
+void wipeable_string::operator+=(char c)
+{
+	push_back(c);
+}
+
+void wipeable_string::operator+=(const char *s)
+{
+	append(s, strlen(s));
+}
+
+void wipeable_string::operator+=(const epee::wipeable_string &s)
+{
+	append(s.data(), s.size());
+}
+
+void wipeable_string::operator+=(const std::string &s)
+{
+	append(s.c_str(), s.size());
+}
+
+boost::optional<epee::wipeable_string> wipeable_string::parse_hexstr() const
+{
+	if (size() % 2 != 0)
+		return boost::none;
+	boost::optional<epee::wipeable_string> res = epee::wipeable_string("");
+	const size_t len = size();
+	const char *d = data();
+	res->grow(0, len / 2);
+	for (size_t i = 0; i < len; i += 2)
+	{
+		char c = atolower(d[i]);
+		const char *ptr0 = strchr(hex, c);
+		if (!ptr0)
+			return boost::none;
+		c = atolower(d[i+1]);
+		const char *ptr1 = strchr(hex, c);
+		if (!ptr1)
+			return boost::none;
+		res->push_back(((ptr0-hex)<<4) | (ptr1-hex));
+	}
+	return res;
+}
+
+char wipeable_string::pop_back()
+{
+	const size_t sz = size();
+	const char c = buffer.back();
+	resize(sz - 1);
+	return c;
 }
 
 void wipeable_string::resize(size_t sz)

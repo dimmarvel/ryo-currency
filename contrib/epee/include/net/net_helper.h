@@ -127,7 +127,6 @@ class blocked_mode_client
 			boost::asio::ip::tcp::resolver resolver(m_io_context);
 			boost::system::error_code ec;
 
-			// resolve the address
 			auto results = resolver.resolve(
 				boost::asio::ip::tcp::v4(), addr, port, boost::asio::ip::tcp::resolver::canonical_name, ec);
 			if (ec || results.empty()) {
@@ -138,7 +137,7 @@ class blocked_mode_client
 			//////////////////////////////////////////////////////////////////////////
 
 			//boost::asio::ip::tcp::endpoint remote_endpoint(boost::asio::ip::address::from_string(addr.c_str()), port);
-        	boost::asio::ip::tcp::endpoint remote_endpoint = *results.begin();
+			boost::asio::ip::tcp::endpoint remote_endpoint = *results.begin();
 			m_ssl_socket.next_layer().open(remote_endpoint.protocol(), ec);
 			if(bind_ip != "0.0.0.0" && bind_ip != "0" && bind_ip != "")
 			{

@@ -720,10 +720,10 @@ bool wallet_rpc_server::fill_response(std::vector<tools::wallet2::pending_tx> &p
 	{
 		if(get_tx_key)
 		{
-			std::string s = epee::string_tools::pod_to_hex(ptx.tx_key);
+			epee::wipeable_string s = epee::to_hex::wipeable_string(ptx.tx_key);
 			for(const crypto::secret_key &additional_tx_key : ptx.additional_tx_keys)
-				s += epee::string_tools::pod_to_hex(additional_tx_key);
-			fill(tx_key, s);
+				s += epee::to_hex::wipeable_string(additional_tx_key);
+			fill(tx_key, std::string(s.data(), s.size()));
 		}
 		// Compute amount leaving wallet in tx. By convention dests does not include change outputs
 		fill(amount, total_amount(ptx));
@@ -1316,11 +1316,13 @@ bool wallet_rpc_server::on_query_key(const wallet_rpc::COMMAND_RPC_QUERY_KEY::re
 	}
 	else if(req.key_type.compare("view_key") == 0)
 	{
-		res.key = string_tools::pod_to_hex(m_wallet->get_account().get_keys().m_view_secret_key);
+		epee::wipeable_string key = epee::to_hex::wipeable_string(m_wallet->get_account().get_keys().m_view_secret_key);
+			res.key = std::string(key.data(), key.size());
 	}
 	else if(req.key_type.compare("spend_key") == 0)
 	{
-		res.key = string_tools::pod_to_hex(m_wallet->get_account().get_keys().m_spend_secret_key);
+		epee::wipeable_string key = epee::to_hex::wipeable_string(m_wallet->get_account().get_keys().m_spend_secret_key);
+			res.key = std::string(key.data(), key.size());
 	}
 	else
 	{
@@ -1545,11 +1547,11 @@ bool wallet_rpc_server::on_get_tx_key(const wallet_rpc::COMMAND_RPC_GET_TX_KEY::
 		return false;
 	}
 
-	std::ostringstream oss;
-	oss << epee::string_tools::pod_to_hex(tx_key);
+	epee::wipeable_string s;
+	s += epee::to_hex::wipeable_string(tx_key);
 	for(size_t i = 0; i < additional_tx_keys.size(); ++i)
-		oss << epee::string_tools::pod_to_hex(additional_tx_keys[i]);
-	res.tx_key = oss.str();
+		s += epee::to_hex::wipeable_string(additional_tx_keys[i]);
+	res.tx_key = std::string(s.data(), s.size());
 	return true;
 }
 //------------------------------------------------------------------------------------------------------------------------------

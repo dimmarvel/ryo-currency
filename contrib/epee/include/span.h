@@ -118,7 +118,8 @@ constexpr bool has_padding() noexcept
 template <typename T>
 span<const std::uint8_t> to_byte_span(const span<const T> src) noexcept
 {
-	static_assert(!has_padding<T>(), "source type may have padding");
+	static_assert(!std::is_empty<T>(), "empty value types will not work -> sizeof == 1");
+	static_assert(std::is_standard_layout_v<T>, "type must have standard layout");
 	return {reinterpret_cast<const std::uint8_t *>(src.data()), src.size_bytes()};
 }
 
@@ -132,7 +133,7 @@ template <typename T>
 span<const std::uint8_t> as_byte_span(const T &src) noexcept
 {
 	static_assert(!std::is_empty<T>(), "empty types will not work -> sizeof == 1");
-	static_assert(!has_padding<T>(), "source type may have padding");
+	static_assert(std::is_standard_layout_v<T>, "type must have standard layout");
 	return {reinterpret_cast<const std::uint8_t *>(std::addressof(src)), sizeof(T)};
 }
 }

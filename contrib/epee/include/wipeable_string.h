@@ -28,11 +28,13 @@
 
 #pragma once
 
+#include <boost/optional/optional.hpp>
 #include <stddef.h>
 #include <string.h>
 #include <string>
 #include <vector>
 
+#include "memwipe.h"
 namespace epee
 {
 class wipeable_string
@@ -47,23 +49,22 @@ class wipeable_string
 	~wipeable_string();
 	void wipe();
 	void push_back(char c);
-	void pop_back();
+	char pop_back();
 	const char *data() const noexcept { return buffer.data(); }
+	char *data() noexcept { return buffer.data(); }
 	size_t size() const noexcept { return buffer.size(); }
 	bool empty() const noexcept { return buffer.empty(); }
+	boost::optional<wipeable_string> parse_hexstr() const;
+	template<typename T> inline bool hex_to_pod(T &pod) const;
+	template<typename T> inline bool hex_to_pod(tools::scrubbed<T> &pod) const { return hex_to_pod(unwrap(pod)); }
 	void resize(size_t sz);
 	void reserve(size_t sz);
 	void clear();
-	wipeable_string &operator+=(const std::string &oth)
-	{
-		std::copy(oth.begin(), oth.end(), std::back_inserter(buffer));
-		return *this;
-	}
-	wipeable_string &operator+=(const char *oth)
-	{
-		std::copy(oth, oth + strlen(oth), std::back_inserter(buffer));
-		return *this;
-	}
+	void operator+=(char c);
+	void operator+=(const std::string &s);
+	void operator+=(const epee::wipeable_string &s);
+	void operator+=(const char *s);
+	void append(const char *ptr, size_t len);
 	bool operator==(const wipeable_string &other) const noexcept { return buffer == other.buffer; }
 	bool operator!=(const wipeable_string &other) const noexcept { return buffer != other.buffer; }
 	wipeable_string &operator=(wipeable_string &&other);
@@ -73,4 +74,18 @@ class wipeable_string
 	void grow(size_t sz, size_t reserved = 0);
 	std::vector<char> buffer;
 };
+
+template<typename T> inline bool wipeable_string::hex_to_pod(T &pod) const
+{
+	static_assert(std::is_pod<T>::value, "expected pod type");
+	if (size() != sizeof(T) * 2)
+		return false;
+	boost::optional<epee::wipeable_string> blob = parse_hexstr();
+	if (!blob)
+		return false;
+	if (blob->size() != sizeof(T))
+		return false;
+	pod = *(const T*)blob->data();
+	return true;
+}
 }

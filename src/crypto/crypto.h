@@ -231,13 +231,6 @@ T rand() {
 	prng::inst().generate_random(&res, sizeof(T));
 	return res;
 }
-// template <typename T>
-// typename std::enable_if<std::is_pod<T>::value, T>::type rand()
-// {
-// 	typename std::remove_cv<T>::type res;
-// 	prng::inst().generate_random(&res, sizeof(T));
-// 	return res;
-// }
 
 void generate_wallet_keys(public_key &pub, secret_key &sec, const secret_key_16 &wallet_secret, uint32_t key_variant);
 void generate_wallet_secret(secret_key_16 &wallet_secret);
@@ -372,10 +365,14 @@ inline std::ostream &operator<<(std::ostream &o, const crypto::public_key &v)
 	epee::to_hex::formatted(o, epee::as_byte_span(v));
 	return o;
 }
-inline std::ostream &operator<<(std::ostream &o, const crypto::secret_key &v)
-{
-	epee::to_hex::formatted(o, epee::as_byte_span(v));
-	return o;
+	/* Do NOT overload the << operator for crypto::secret_key here. Use secret_key_explicit_print_ref
+	* instead to prevent accidental implicit dumping of secret key material to the logs (which has
+	* happened before). For the same reason, do not overload it for crypto::ec_scalar either since
+	* crypto::secret_key is a subclass. I'm not sorry that it's obtuse; that's the point, bozo.
+	*/
+struct secret_key_explicit_print_ref { const crypto::secret_key &sk; };
+inline std::ostream &operator <<(std::ostream &o, const secret_key_explicit_print_ref v) {
+	epee::to_hex::formatted(o, epee::as_byte_span(v.sk)); return o;
 }
 inline std::ostream &operator<<(std::ostream &o, const crypto::key_derivation &v)
 {

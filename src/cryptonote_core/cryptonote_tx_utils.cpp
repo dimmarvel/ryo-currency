@@ -122,7 +122,7 @@ bool construct_miner_tx(cryptonote::network_type nettype, size_t height, size_t 
 	crypto::key_derivation derivation = AUTO_VAL_INIT(derivation);
 	crypto::public_key out_eph_public_key = AUTO_VAL_INIT(out_eph_public_key);
 	bool r = crypto::generate_key_derivation(miner_address.m_view_public_key, txkey.sec, derivation);
-	GULPS_CHECK_AND_ASSERT_MES(r, false, "while creating outs: failed to generate_key_derivation(" , miner_address.m_view_public_key , ", " , txkey.sec , ")");
+	GULPS_CHECK_AND_ASSERT_MES(r, false, "while creating outs: failed to generate_key_derivation(" , miner_address.m_view_public_key , ", " , crypto::secret_key_explicit_print_ref{txkey.sec} , ")");
 
 	r = crypto::derive_public_key(derivation, 0, miner_address.m_spend_public_key, out_eph_public_key);
 	GULPS_CHECK_AND_ASSERT_MES(r, false, "while creating outs: failed to derive_public_key(" , derivation , ", 0, " , miner_address.m_spend_public_key , ")");
@@ -138,7 +138,7 @@ bool construct_miner_tx(cryptonote::network_type nettype, size_t height, size_t 
 		GULPS_CHECK_AND_ASSERT_MES(r, false, "Failed to parse dev address");
 
 		r = crypto::generate_key_derivation(dev_addr.address.m_view_public_key, txkey.sec, derivation);
-		GULPS_CHECK_AND_ASSERT_MES(r, false, "while creating outs: failed to generate_key_derivation(" , dev_addr.address.m_view_public_key , ", " , txkey.sec , ")");
+		GULPS_CHECK_AND_ASSERT_MES(r, false, "while creating outs: failed to generate_key_derivation(<" , dev_addr.address.m_view_public_key , ">, " , crypto::secret_key_explicit_print_ref{txkey.sec} , ")");
 
 		r = crypto::derive_public_key(derivation, 1, dev_addr.address.m_spend_public_key, out_eph_public_key);
 		GULPS_CHECK_AND_ASSERT_MES(r, false, "while creating outs: failed to derive_public_key(" , derivation , ", 1, " , dev_addr.address.m_spend_public_key , ")");
@@ -341,13 +341,15 @@ bool construct_tx_with_tx_key(const account_keys &sender_account_keys, const std
 		{
 			// sending change to yourself; derivation = a*R
 			r = hwdev.generate_key_derivation(txkey_pub, sender_account_keys.m_view_secret_key, derivation);
-			GULPS_CHECK_AND_ASSERT_MES(r, false, "at creation outs: failed to generate_key_derivation(" , txkey_pub , ", " , sender_account_keys.m_view_secret_key , ")");
+			GULPS_CHECK_AND_ASSERT_MES(r, false, "at creation outs: failed to generate_key_derivation(" , txkey_pub , ", <viewkey>)");
 		}
 		else
 		{
 			// sending to the recipient; derivation = r*A (or s*C in the subaddress scheme)
-			r = hwdev.generate_key_derivation(dst_entr.addr.m_view_public_key, dst_entr.is_subaddress && need_additional_txkeys ? additional_txkey.sec : tx_key, derivation);
-			GULPS_CHECK_AND_ASSERT_MES(r, false, "at creation outs: failed to generate_key_derivation(" , dst_entr.addr.m_view_public_key , ", " , (dst_entr.is_subaddress && need_additional_txkeys ? additional_txkey.sec : tx_key) , ")");
+			const crypto::secret_key &tx_privkey{dst_entr.is_subaddress && need_additional_txkeys ? additional_txkey.sec : tx_key};
+				r = generate_key_derivation(dst_entr.addr.m_view_public_key, tx_privkey, derivation);
+			GULPS_CHECK_AND_ASSERT_MES(r, false, "at creation outs: failed to generate_key_derivation(",
+				dst_entr.addr.m_view_public_key, ", ", crypto::secret_key_explicit_print_ref{tx_privkey}, ")");
 		}
 
 		if(need_additional_txkeys)

@@ -246,14 +246,14 @@ bool generate_key_image_helper(const account_keys &ack, const std::unordered_map
 {
 	crypto::key_derivation recv_derivation = AUTO_VAL_INIT(recv_derivation);
 	bool r = hwdev.generate_key_derivation(tx_public_key, ack.m_view_secret_key, recv_derivation);
-	GULPS_CHECK_AND_ASSERT_MES(r, false, "key image helper: failed to generate_key_derivation(" , tx_public_key , ", " , ack.m_view_secret_key , ")");
+	GULPS_CHECK_AND_ASSERT_MES(r, false, "key image helper: failed to generate_key_derivation(" , tx_public_key , ", <viewkey>)");
 
 	std::vector<crypto::key_derivation> additional_recv_derivations;
 	for(size_t i = 0; i < additional_tx_public_keys.size(); ++i)
 	{
 		crypto::key_derivation additional_recv_derivation = AUTO_VAL_INIT(additional_recv_derivation);
 		r = hwdev.generate_key_derivation(additional_tx_public_keys[i], ack.m_view_secret_key, additional_recv_derivation);
-		GULPS_CHECK_AND_ASSERT_MES(r, false, "key image helper: failed to generate_key_derivation(" , additional_tx_public_keys[i] , ", " , ack.m_view_secret_key , ")");
+		GULPS_CHECK_AND_ASSERT_MES(r, false, "key image helper: failed to generate_key_derivation(" , additional_tx_public_keys[i] , ", <viewkey>)");
 		additional_recv_derivations.push_back(additional_recv_derivation);
 	}
 
