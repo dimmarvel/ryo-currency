@@ -70,6 +70,7 @@ class ipv4_network_address
 	bool is_loopback() const;
 	bool is_local() const;
 	static constexpr uint8_t get_type_id() noexcept { return ID; }
+	static constexpr bool is_blockable() noexcept { return true; }
 
 	static const uint8_t ID = 1;
 	BEGIN_KV_SERIALIZE_MAP(ipv4_network_address)
@@ -118,6 +119,7 @@ class network_address
 		virtual bool is_loopback() const = 0;
 		virtual bool is_local() const = 0;
 		virtual uint8_t get_type_id() const = 0;
+		virtual bool is_blockable() const = 0;
 	};
 
 	template <typename T>
@@ -154,6 +156,7 @@ class network_address
 		virtual bool is_loopback() const override { return value.is_loopback(); }
 		virtual bool is_local() const override { return value.is_local(); }
 		virtual uint8_t get_type_id() const override { return value.get_type_id(); }
+		virtual bool is_blockable() const override { return value.is_blockable(); }
 	};
 
 	std::shared_ptr<interface> self = nullptr;
@@ -181,6 +184,7 @@ class network_address
 	bool is_loopback() const { return self ? self->is_loopback() : false; }
 	bool is_local() const { return self ? self->is_local() : false; }
 	uint8_t get_type_id() const { return self ? self->get_type_id() : 0; }
+	bool is_blockable() const { return self ? self->is_blockable() : false; }
 	template <typename Type>
 	const Type &as() const { return as_mutable<const Type>(); }
 

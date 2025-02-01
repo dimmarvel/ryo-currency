@@ -54,7 +54,6 @@ extern "C" {
 #include "multiexp.h"
 #include "rctOps.h"
 
-
 #define DEBUG_BP
 
 #define PERF_TIMER_START_BP(x) PERF_TIMER_START_UNIT(x, 1000000)
@@ -1190,8 +1189,10 @@ bool bulletproof_VERIFY(const std::vector<const Bulletproof *> &proofs)
 bool bulletproof_VERIFY(const std::vector<Bulletproof> &proofs)
 {
 	std::vector<const Bulletproof *> proof_pointers;
+	proof_pointers.reserve(proofs.size());
 	for(const Bulletproof &proof : proofs)
 		proof_pointers.push_back(&proof);
+	
 	return bulletproof_VERIFY(proof_pointers);
 }
 

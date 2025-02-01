@@ -47,6 +47,7 @@
 #pragma once
 #include "copyable_atomic.h"
 #include "net/net_utils_base.h"
+
 #include <atomic>
 #include <unordered_set>
 
@@ -56,7 +57,8 @@ namespace cryptonote
 struct cryptonote_connection_context : public epee::net_utils::connection_context_base
 {
 	cryptonote_connection_context() : m_state(state_before_handshake), m_remote_blockchain_height(0), m_last_response_height(0),
-									  m_last_request_time(boost::posix_time::microsec_clock::universal_time()), m_callback_request_count(0), m_last_known_hash(crypto::null_hash) {}
+		m_last_request_time(boost::posix_time::microsec_clock::universal_time()), m_callback_request_count(0), m_last_known_hash(crypto::null_hash),
+		m_anchor(false), m_score(0){}
 
 	enum state
 	{
@@ -68,14 +70,16 @@ struct cryptonote_connection_context : public epee::net_utils::connection_contex
 	};
 
 	state m_state;
-	std::list<crypto::hash> m_needed_objects;
+    std::vector<crypto::hash> m_needed_objects;
 	std::unordered_set<crypto::hash> m_requested_objects;
 	uint64_t m_remote_blockchain_height;
 	uint64_t m_last_response_height;
 	boost::posix_time::ptime m_last_request_time;
 	epee::copyable_atomic m_callback_request_count; //in debug purpose: problem with double callback rise
+	int32_t m_score;
 	crypto::hash m_last_known_hash;
-	//size_t m_score;  TODO: add score calculations
+	epee::copyable_atomic m_idle_peer_notification{0};
+    bool m_anchor;
 };
 
 inline std::string get_protocol_state_string(cryptonote_connection_context::state s)

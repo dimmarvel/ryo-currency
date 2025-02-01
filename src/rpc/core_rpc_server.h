@@ -171,10 +171,10 @@ class core_rpc_server : public epee::http_server_impl_base<core_rpc_server>
 	END_URI_MAP2()
 
 	bool on_get_height(const COMMAND_RPC_GET_HEIGHT::request &req, COMMAND_RPC_GET_HEIGHT::response &res);
-	bool on_get_blocks(const COMMAND_RPC_GET_BLOCKS_FAST::request &req, COMMAND_RPC_GET_BLOCKS_FAST::response &res);
+	bool on_get_blocks(const COMMAND_RPC_GET_BLOCKS_FAST::request &req, COMMAND_RPC_GET_BLOCKS_FAST::response &res, const connection_context *ctx = NULL);
 	bool on_get_alt_blocks_hashes(const COMMAND_RPC_GET_ALT_BLOCKS_HASHES::request &req, COMMAND_RPC_GET_ALT_BLOCKS_HASHES::response &res);
 	bool on_get_blocks_by_height(const COMMAND_RPC_GET_BLOCKS_BY_HEIGHT::request &req, COMMAND_RPC_GET_BLOCKS_BY_HEIGHT::response &res);
-	bool on_get_hashes(const COMMAND_RPC_GET_HASHES_FAST::request &req, COMMAND_RPC_GET_HASHES_FAST::response &res);
+	bool on_get_hashes(const COMMAND_RPC_GET_HASHES_FAST::request &req, COMMAND_RPC_GET_HASHES_FAST::response &res, const connection_context *ctx = NULL);
 	bool on_get_transactions(const COMMAND_RPC_GET_TRANSACTIONS::request &req, COMMAND_RPC_GET_TRANSACTIONS::response &res);
 	bool on_is_key_image_spent(const COMMAND_RPC_IS_KEY_IMAGE_SPENT::request &req, COMMAND_RPC_IS_KEY_IMAGE_SPENT::response &res, bool request_has_rpc_origin = true);
 	bool on_get_indexes(const COMMAND_RPC_GET_TX_GLOBAL_OUTPUTS_INDEXES::request &req, COMMAND_RPC_GET_TX_GLOBAL_OUTPUTS_INDEXES::response &res);
@@ -232,6 +232,7 @@ class core_rpc_server : public epee::http_server_impl_base<core_rpc_server>
   private:
 	bool check_core_busy();
 	bool check_core_ready();
+	bool add_host_fail(const connection_context *ctx, unsigned int score = 1);
 
 	//utils
 	uint64_t get_block_reward(const block &blk);
@@ -255,6 +256,8 @@ class core_rpc_server : public epee::http_server_impl_base<core_rpc_server>
 	bool m_was_bootstrap_ever_used;
 	network_type m_nettype;
 	bool m_restricted;
+	epee::critical_section m_host_fails_score_lock;
+	std::map<std::string, uint64_t> m_host_fails_score;
 };
 }
 

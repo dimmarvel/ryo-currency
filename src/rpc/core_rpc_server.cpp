@@ -100,7 +100,8 @@ void core_rpc_server::init_options(boost::program_options::options_description &
 //------------------------------------------------------------------------------------------------------------------------------
 core_rpc_server::core_rpc_server(
 	core &cr, nodetool::node_server<cryptonote::t_cryptonote_protocol_handler<cryptonote::core>> &p2p)
-	: m_core(cr), m_p2p(p2p)
+	: m_core(cr)
+	, m_p2p(p2p)
 {
 }
 //------------------------------------------------------------------------------------------------------------------------------
@@ -157,6 +158,25 @@ bool core_rpc_server::check_core_ready()
 	}
 	return true;
 }
+//------------------------------------------------------------------------------------------------------------------------------
+bool core_rpc_server::add_host_fail(const connection_context *ctx, unsigned int score)
+{
+	if(!ctx || !ctx->m_remote_address.is_blockable())
+		return false;
+
+	CRITICAL_REGION_LOCAL(m_host_fails_score_lock);
+	uint64_t fails = m_host_fails_score[ctx->m_remote_address.host_str()] += score;
+	GULPSF_LOG_L1("Host {} fail score={}", ctx->m_remote_address.host_str(), fails);
+	if(fails > RPC_IP_FAILS_BEFORE_BLOCK)
+	{
+		auto it = m_host_fails_score.find(ctx->m_remote_address.host_str());
+		GULPS_CHECK_AND_ASSERT_MES(it != m_host_fails_score.end(), false, "internal error");
+		it->second = RPC_IP_FAILS_BEFORE_BLOCK/2;
+		m_p2p.block_host(ctx->m_remote_address);
+	}
+	return true;
+}
+
 #define CHECK_CORE_READY()                     \
 	do                                         \
 	{                                          \
@@ -231,7 +251,7 @@ bool core_rpc_server::on_get_info(const COMMAND_RPC_GET_INFO::request &req, COMM
 	return true;
 }
 //------------------------------------------------------------------------------------------------------------------------------
-bool core_rpc_server::on_get_blocks(const COMMAND_RPC_GET_BLOCKS_FAST::request &req, COMMAND_RPC_GET_BLOCKS_FAST::response &res)
+bool core_rpc_server::on_get_blocks(const COMMAND_RPC_GET_BLOCKS_FAST::request &req, COMMAND_RPC_GET_BLOCKS_FAST::response &res, const connection_context *ctx)
 {
 	PERF_TIMER(on_get_blocks);
 	bool r;
@@ -248,6 +268,7 @@ bool core_rpc_server::on_get_blocks(const COMMAND_RPC_GET_BLOCKS_FAST::request &
 		res.current_height, res.start_height, COMMAND_RPC_GET_BLOCKS_FAST_MAX_COUNT))
 	{
 		res.status = "Failed";
+		add_host_fail(ctx);
 		return false;
 	}
 
@@ -261,7 +282,7 @@ bool core_rpc_server::on_get_alt_blocks_hashes(const COMMAND_RPC_GET_ALT_BLOCKS_
 	if(use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_ALT_BLOCKS_HASHES>(invoke_http_mode::JON, "/get_alt_blocks_hashes", req, res, r))
 		return r;
 
-	std::list<block> blks;
+	std::vector<block> blks;
 
 	if(!m_core.get_alternative_blocks(blks))
 	{
@@ -303,8 +324,8 @@ bool core_rpc_server::on_get_blocks_by_height(const COMMAND_RPC_GET_BLOCKS_BY_HE
 			res.status = "Error retrieving block at height " + std::to_string(height);
 			return true;
 		}
-		std::list<transaction> txs;
-		std::list<crypto::hash> missed_txs;
+		std::vector<transaction> txs;
+		std::vector<crypto::hash> missed_txs;
 		m_core.get_transactions(blk.tx_hashes, txs, missed_txs);
 		res.blocks.resize(res.blocks.size() + 1);
 		res.blocks.back().block = block_to_blob(blk);
@@ -315,7 +336,7 @@ bool core_rpc_server::on_get_blocks_by_height(const COMMAND_RPC_GET_BLOCKS_BY_HE
 	return true;
 }
 //------------------------------------------------------------------------------------------------------------------------------
-bool core_rpc_server::on_get_hashes(const COMMAND_RPC_GET_HASHES_FAST::request &req, COMMAND_RPC_GET_HASHES_FAST::response &res)
+bool core_rpc_server::on_get_hashes(const COMMAND_RPC_GET_HASHES_FAST::request &req, COMMAND_RPC_GET_HASHES_FAST::response &res, const connection_context *ctx)
 {
 	PERF_TIMER(on_get_hashes);
 	bool r;
@@ -328,6 +349,7 @@ bool core_rpc_server::on_get_hashes(const COMMAND_RPC_GET_HASHES_FAST::request &
 	if(!m_core.find_blockchain_supplement(req.block_ids, resp))
 	{
 		res.status = "Failed";
+		add_host_fail(ctx);
 		return false;
 	}
 	res.current_height = resp.total_height;
@@ -516,8 +538,8 @@ bool core_rpc_server::on_get_transactions(const COMMAND_RPC_GET_TRANSACTIONS::re
 		}
 		vh.push_back(*reinterpret_cast<const crypto::hash *>(b.data()));
 	}
-	std::list<crypto::hash> missed_txs;
-	std::list<transaction> txs;
+	std::vector<crypto::hash> missed_txs;
+	std::vector<transaction> txs;
 	bool r = m_core.get_transactions(vh, txs, missed_txs);
 	if(!r)
 	{
@@ -538,25 +560,26 @@ bool core_rpc_server::on_get_transactions(const COMMAND_RPC_GET_TRANSACTIONS::re
 		if(r)
 		{
 			// sort to match original request
-			std::list<transaction> sorted_txs;
+			std::vector<transaction> sorted_txs;
 			std::vector<tx_info>::const_iterator i;
+			unsigned txs_processed = 0;
 			for(const crypto::hash &h : vh)
 			{
 				if(std::find(missed_txs.begin(), missed_txs.end(), h) == missed_txs.end())
 				{
-					if(txs.empty())
+					if(txs.size() == txs_processed)
 					{
 						res.status = "Failed: internal error - txs is empty";
 						return true;
 					}
 					// core returns the ones it finds in the right order
-					if(get_transaction_hash(txs.front()) != h)
+					if(get_transaction_hash(txs[txs_processed]) != h)
 					{
 						res.status = "Failed: tx hash mismatch";
 						return true;
 					}
-					sorted_txs.push_back(std::move(txs.front()));
-					txs.pop_front();
+					sorted_txs.push_back(std::move(txs[txs_processed]));
+					++txs_processed;
 				}
 				else if((i = std::find_if(pool_tx_info.begin(), pool_tx_info.end(), [h](const tx_info &txi) { return epee::string_tools::pod_to_hex(h) == txi.id_hash; })) != pool_tx_info.end())
 				{
@@ -567,7 +590,7 @@ bool core_rpc_server::on_get_transactions(const COMMAND_RPC_GET_TRANSACTIONS::re
 						return true;
 					}
 					sorted_txs.push_back(tx);
-					missed_txs.remove(h);
+					missed_txs.erase(std::find(missed_txs.begin(), missed_txs.end(), h));
 					pool_tx_hashes.insert(h);
 					const std::string hash_string = epee::string_tools::pod_to_hex(h);
 					for(const auto &ti : pool_tx_info)
@@ -586,7 +609,7 @@ bool core_rpc_server::on_get_transactions(const COMMAND_RPC_GET_TRANSACTIONS::re
 		GULPSF_LOG_L2("Found {}/{} transactions in the pool", found_in_pool , vh.size() );
 	}
 
-	std::list<std::string>::const_iterator txhi = req.txs_hashes.begin();
+	std::vector<std::string>::const_iterator txhi = req.txs_hashes.begin();
 	std::vector<crypto::hash>::const_iterator vhi = vh.begin();
 	for(auto &tx : txs)
 	{
@@ -1667,10 +1690,10 @@ bool core_rpc_server::on_flush_txpool(const COMMAND_RPC_FLUSH_TRANSACTION_POOL::
 	PERF_TIMER(on_flush_txpool);
 
 	bool failed = false;
-	std::list<crypto::hash> txids;
+	std::vector<crypto::hash> txids;
 	if(req.txids.empty())
 	{
-		std::list<transaction> pool_txs;
+		std::vector<transaction> pool_txs;
 		bool r = m_core.get_pool_transactions(pool_txs);
 		if(!r)
 		{

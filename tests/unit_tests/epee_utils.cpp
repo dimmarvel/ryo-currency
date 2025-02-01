@@ -529,6 +529,7 @@ TEST(NetUtils, NetworkAddress)
 		constexpr static bool is_local() noexcept { return false; }
 		static std::string str() { return {}; }
 		static std::string host_str() { return {}; }
+		constexpr static bool is_blockable() noexcept { return false; }
 		constexpr static uint8_t get_type_id() noexcept { return uint8_t(-1); }
 	};
 
@@ -540,6 +541,7 @@ TEST(NetUtils, NetworkAddress)
 	EXPECT_FALSE(empty.is_loopback());
 	EXPECT_FALSE(empty.is_local());
 	EXPECT_EQ(0, empty.get_type_id());
+	EXPECT_FALSE(empty.is_blockable());
 	EXPECT_THROW(empty.as<custom_address>(), std::bad_cast);
 
 	epee::net_utils::network_address address1{
@@ -556,6 +558,7 @@ TEST(NetUtils, NetworkAddress)
 	EXPECT_FALSE(address1.is_local());
 	EXPECT_EQ(epee::net_utils::ipv4_network_address::ID, address1.get_type_id());
 	EXPECT_NO_THROW(address1.as<epee::net_utils::ipv4_network_address>());
+	EXPECT_TRUE(address1.is_blockable());
 	EXPECT_THROW(address1.as<custom_address>(), std::bad_cast);
 
 	const epee::net_utils::network_address loopback{
