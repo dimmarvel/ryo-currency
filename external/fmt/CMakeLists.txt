@@ -1,6 +1,6 @@
 message(STATUS "CMake version: ${CMAKE_VERSION}")
 
-cmake_minimum_required(VERSION 3.1.0)
+cmake_minimum_required(VERSION 3.26.0)
 
 # Determine if fmt is built as a subproject (using add_subdirectory)
 # or if it is the master project.
@@ -69,7 +69,8 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
       -Wctor-dtor-privacy -Wdisabled-optimization
       -Winvalid-pch -Wmissing-declarations -Woverloaded-virtual
       -Wno-ctor-dtor-privacy -Wno-dangling-else -Wno-float-equal
-      -Wno-format-nonliteral -Wno-sign-conversion -Wno-shadow)
+      -Wno-format-nonliteral -Wno-sign-conversion -Wno-shadow
+      -fext-numeric-literals)
   if (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.6)
       set(PEDANTIC_COMPILE_FLAGS ${PEDANTIC_COMPILE_FLAGS} -Wnoexcept)
   endif ()

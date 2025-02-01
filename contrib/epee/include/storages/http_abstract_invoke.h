@@ -53,7 +53,7 @@ bool invoke_http_json(const boost::string_ref uri, const t_request &out_struct, 
 	const http::http_response_info *pri = NULL;
 	if(!transport.invoke(uri, method, req_param, timeout, std::addressof(pri), std::move(additional_params)))
 	{
-		GULPS_LOG_L1("Failed to invoke http request to  ", uri);
+		GULPS_LOG_L1("[invoke_http_json] Failed to invoke http request to  ", uri);
 		return false;
 	}
 
@@ -84,7 +84,7 @@ bool invoke_http_bin(const boost::string_ref uri, const t_request &out_struct, t
 	const http::http_response_info *pri = NULL;
 	if(!transport.invoke(uri, method, req_param, timeout, std::addressof(pri)))
 	{
-		GULPS_LOG_L1("Failed to invoke http request to  ", uri);
+		GULPS_LOG_L1("[invoke_http_bin] Failed to invoke http request to  ", uri);
 		return false;
 	}
 

@@ -171,13 +171,13 @@ bool gen_multisig_tx_validation_base::generate_with(std::vector<test_event_entry
 				GULPS_CHECK_AND_ASSERT_MES(r, false, "Failed to generate multisig export key image");
 			}
 			std::cout << "Party " << msidx << ":" << std::endl;
-			std::cout << "spend: sec " << miner_account[msidx].get_keys().m_spend_secret_key << ", pub " << miner_account[msidx].get_keys().m_account_address.m_spend_public_key << std::endl;
-			std::cout << "view: sec " << miner_account[msidx].get_keys().m_view_secret_key << ", pub " << miner_account[msidx].get_keys().m_account_address.m_view_public_key << std::endl;
+			std::cout << "spend: sec " << crypto::secret_key_explicit_print_ref{miner_account[msidx].get_keys().m_spend_secret_key} << ", pub " << miner_account[msidx].get_keys().m_account_address.m_spend_public_key << std::endl;
+			std::cout << "view: sec " << crypto::secret_key_explicit_print_ref{miner_account[msidx].get_keys().m_view_secret_key} << ", pub " << miner_account[msidx].get_keys().m_account_address.m_view_public_key << std::endl;
 			for(const auto &k : miner_account[msidx].get_multisig_keys())
-				std::cout << "msk: " << k << std::endl;
+				std::cout << "msk: " << crypto::secret_key_explicit_print_ref{k} << std::endl;
 			for(size_t n = 0; n < account_k[msidx][tdidx].size(); ++n)
 			{
-				std::cout << "k: " << account_k[msidx][tdidx][n] << std::endl;
+				std::cout << "k: " << crypto::secret_key_explicit_print_ref{account_k[msidx][tdidx][n]} << std::endl;
 				std::cout << "L: " << account_L[msidx][tdidx][n] << std::endl;
 				std::cout << "R: " << account_R[msidx][tdidx][n] << std::endl;
 			}
@@ -214,8 +214,6 @@ bool gen_multisig_tx_validation_base::generate_with(std::vector<test_event_entry
 				if(used_L.find(account_L[msidx][tdidx][lr]) == used_L.end())
 				{
 					used_L.insert(account_L[msidx][tdidx][lr]);
-					std::cout << "Adding L " << account_L[msidx][tdidx][lr] << " (for k " << account_k[msidx][tdidx][lr] << ")" << std::endl;
-					std::cout << "Adding R " << account_R[msidx][tdidx][lr] << std::endl;
 					rct::addKeys((rct::key &)kLRki.L, kLRki.L, rct::pk2rct(account_L[msidx][tdidx][lr]));
 					rct::addKeys((rct::key &)kLRki.R, kLRki.R, rct::pk2rct(account_R[msidx][tdidx][lr]));
 					break;
@@ -350,7 +348,7 @@ bool gen_multisig_tx_validation_base::generate_with(std::vector<test_event_entry
 			std::cout << "signing with k " << k.back() << std::endl;
 			std::cout << "signing with sk " << skey << std::endl;
 			for(const auto &sk : used_keys)
-				std::cout << "  created with sk " << sk << std::endl;
+				std::cout << "  created with sk " << crypto::secret_key_explicit_print_ref{sk} << std::endl;
 			std::cout << "signing with c size " << msout.c.size() << std::endl;
 			std::cout << "signing with c " << msout.c.back() << std::endl;
 			r = rct::signMultisig(tx.rct_signatures, indices, k, msout, skey);

@@ -336,7 +336,7 @@ std::string pod_to_hex(const t_pod_type &s)
 template <class t_pod_type>
 bool hex_to_pod(const std::string &hex_str, t_pod_type &s)
 {
-	static_assert(std::is_pod<t_pod_type>::value, "expected pod type");
+	static_assert(std::is_standard_layout<t_pod_type>(), "expected standard layout type");
 	std::string hex_str_tr = trim(hex_str);
 	if(sizeof(s) * 2 != hex_str.size())
 		return false;

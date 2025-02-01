@@ -54,19 +54,19 @@ if (IOS)
     INCLUDE(CmakeLists_IOS.txt)
 endif()
 
-cmake_minimum_required(VERSION 3.1.0)
+cmake_minimum_required(VERSION 3.26.0)
 
 project(ryo)
 
 # enforce C++11
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_CXX_STANDARD 11)
-
-# enforce C11
+set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
-set(CMAKE_C_STANDARD 11)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 
 # helper function to generate options
 function(ryo_option name description default)
@@ -479,6 +479,10 @@ if(STATIC AND NOT IOS)
   endif()
 endif()
 
+if (WIN32)
+  list(APPEND OPENSSL_LIBRARIES crypt32)
+endif()
+
 # find_package(PCSC) PCSC is not useful to us yet
 
 add_definition_if_library_exists(c memset_s "string.h" HAVE_MEMSET_S)
@@ -557,7 +561,7 @@ else()
     set(WARNINGS "${WARNINGS} -Wlogical-op -Wno-error=maybe-uninitialized -Wno-error=cpp")
   endif()
   if(MINGW)
-    set(WARNINGS "${WARNINGS} -Wno-error=unused-value -Wno-error=unused-but-set-variable")
+    set(WARNINGS "${WARNINGS}  -Wno-error=unused-value -Wno-error=unused-but-set-variable")
     set(MINGW_FLAG "${MINGW_FLAG} -DWIN32_LEAN_AND_MEAN")
     set(Boost_THREADAPI win32)
     include_directories(SYSTEM src/platform/mingw)
@@ -848,19 +852,40 @@ if(STATIC)
   set(Boost_USE_STATIC_LIBS ON)
   set(Boost_USE_STATIC_RUNTIME ON)
 endif()
-find_package(Boost 1.58 QUIET REQUIRED COMPONENTS system filesystem thread date_time chrono regex serialization program_options locale)
+# Find Boost headers
+set(BOOST_MIN_VER 1.62)
+find_package(Boost ${BOOST_MIN_VER} QUIET REQUIRED)
 
-set(CMAKE_FIND_LIBRARY_SUFFIXES ${OLD_LIB_SUFFIXES})
 if(NOT Boost_FOUND)
-  die("Could not find Boost libraries, please make sure you have installed Boost or libboost-all-dev (1.58) or the equivalent")
+  die("Could not find Boost libraries, please make sure you have installed Boost or libboost-all-dev (>=${BOOST_MIN_VER}) or the equivalent")
 elseif(Boost_FOUND)
-  message(STATUS "Found Boost Version: ${Boost_VERSION}")
-  if (Boost_VERSION VERSION_LESS 1.62.0 AND NOT (OPENSSL_VERSION VERSION_LESS 1.1))
-      message(FATAL_ERROR "Boost older than 1.62 is too old to link with OpenSSL 1.1 or newer. "
-                          "Update Boost or install OpenSSL 1.0 and set path to it when running cmake: "
-                          "cmake -DOPENSSL_ROOT_DIR='/usr/include/openssl-1.0;/usr/lib/openssl-1.0'")
+  message(STATUS "Found Boost Version: ${Boost_VERSION_STRING}")
+
+  set(BOOST_COMPONENTS filesystem thread date_time chrono serialization program_options)
+  if (WIN32)
+    list(APPEND BOOST_COMPONENTS locale)
   endif()
+
+  # Boost System is header-only since 1.69
+  if (Boost_VERSION_STRING VERSION_LESS 1.69.0)
+    list(APPEND BOOST_COMPONENTS system)
+  endif()
+
+  # Boost Regex is header-only since 1.77
+  if (Boost_VERSION_STRING VERSION_LESS 1.77.0)
+    list(APPEND BOOST_COMPONENTS regex)
+  endif()
+
+  message(STATUS "Boost components: ${BOOST_COMPONENTS}")
+
+  # Find required Boost libraries
+  find_package(Boost ${BOOST_MIN_VER} QUIET REQUIRED COMPONENTS ${BOOST_COMPONENTS})
+  set(CMAKE_FIND_LIBRARY_SUFFIXES ${OLD_LIB_SUFFIXES})
 endif()
+
+add_definitions(-DBOOST_ASIO_ENABLE_SEQUENTIAL_STRAND_ALLOCATION)
+add_definitions(-DBOOST_NO_AUTO_PTR)
+add_definitions(-DBOOST_UUID_DISABLE_ALIGNMENT) # This restores UUID's std::has_unique_object_representations property
 
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 if(MINGW)

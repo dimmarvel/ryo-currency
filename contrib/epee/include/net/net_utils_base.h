@@ -28,12 +28,13 @@
 #define _NET_UTILS_BASE_H_
 
 #include "serialization/keyvalue_serialization.h"
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <type_traits>
 #include <typeinfo>
 
 #include "common/gulps.hpp"
+#include "common/int-util.h"
 
 #ifndef MAKE_IP
 #define MAKE_IP(a1, a2, a3, a4) (a1 | (a2 << 8) | (a3 << 16) | (a4 << 24))
@@ -74,8 +75,17 @@ class ipv4_network_address
 
 	static const uint8_t ID = 1;
 	BEGIN_KV_SERIALIZE_MAP(ipv4_network_address)
-	KV_SERIALIZE(m_ip)
-	KV_SERIALIZE(m_port)
+		if (is_store)
+		{
+			uint32_t ip = SWAP32LE(this_ref.m_ip);
+			epee::serialization::selector<is_store>::serialize(ip, stg, hparent_section, "m_ip");
+		}
+		else
+		{
+			KV_SERIALIZE(m_ip)
+			const_cast<ipv4_network_address&>(this_ref).m_ip = SWAP32LE(this_ref.m_ip);
+		}
+		KV_SERIALIZE(m_port)
 	END_KV_SERIALIZE_MAP()
 };
 
@@ -329,7 +339,7 @@ struct i_service_endpoint
 	virtual bool close() = 0;
 	virtual bool call_run_once_service_io() = 0;
 	virtual bool request_callback() = 0;
-	virtual boost::asio::io_service &get_io_service() = 0;
+	virtual boost::asio::io_context &get_io_context() = 0;
 	//protect from deletion connection object(with protocol instance) during external call "invoke"
 	virtual bool add_ref() = 0;
 	virtual bool release() = 0;
@@ -353,8 +363,8 @@ inline std::ostream &operator<<(std::ostream &os, const connection_context_base 
 }
 
 #if BOOST_VERSION >= 107000
-#define GET_IO_SERVICE(s) ((boost::asio::io_context&)(s).get_executor().context())
+#define GET_IO_CONTEXT(s) ((boost::asio::io_context&)(s).get_executor().context())
 #else
-#define GET_IO_SERVICE(s) ((s).get_io_service())
+#define GET_IO_CONTEXT(s) ((s).get_io_context())
 #endif
 #endif //_NET_UTILS_BASE_H_
