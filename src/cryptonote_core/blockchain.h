@@ -353,7 +353,7 @@ class Blockchain
      *
      * @return true if the block is known, else false
      */
-     bool have_block_unlocked(const crypto::hash& id, int *where = NULL) const;
+	bool have_block_unlocked(const crypto::hash& id, int *where = NULL) const;
 	bool have_block(const crypto::hash &id, int *where = NULL) const;
 
 	/**
@@ -690,7 +690,7 @@ class Blockchain
      *
      * @return false if an unexpected exception occurs, else true
      */
-     bool get_transactions_blobs(const std::vector<crypto::hash>& txs_ids, std::vector<cryptonote::blobdata>& txs, std::vector<crypto::hash>& missed_txs) const;
+	bool get_transactions_blobs(const std::vector<crypto::hash>& txs_ids, std::vector<cryptonote::blobdata>& txs, std::vector<crypto::hash>& missed_txs) const;
 	template <class t_ids_container, class t_tx_container, class t_missed_container>
 	bool get_transactions(const t_ids_container &txs_ids, t_tx_container &txs, t_missed_container &missed_txs) const;
 
@@ -810,7 +810,7 @@ class Blockchain
      *
      * @return the height
      */
-     uint64_t get_earliest_ideal_height_for_version(uint8_t version) const { return m_hardfork->get_earliest_ideal_height_for_version(version); }
+	uint64_t get_earliest_ideal_height_for_version(uint8_t version) const { return m_hardfork->get_earliest_ideal_height_for_version(version); }
 
 	/**
      * @brief get information about hardfork voting for a version

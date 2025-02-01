@@ -71,14 +71,14 @@ void threadpool::destroy() {
 		running = false;
 		has_work.notify_all();
 	}
-	catch (...)
+	catch(...)
 	{
 		// if the lock throws, we're just do it without a lock and hope,
 		// since the alternative is terminate
 		running = false;
 		has_work.notify_all();
 	}
-	for (size_t i = 0; i<threads.size(); i++) {
+	for(size_t i = 0; i<threads.size(); i++) {
 		try { threads[i].join(); }
 		catch (...) { /* ignore */ }
 	}
@@ -105,7 +105,7 @@ void threadpool::create(unsigned int max_threads) {
 void threadpool::submit(waiter *obj, std::function<void()> f, bool leaf)
 {
 	boost::unique_lock<boost::mutex> lock(mutex);
-	if (!leaf && ((active == max && !queue.empty()) || depth > 0)) {
+	if(!leaf && ((active == max && !queue.empty()) || depth > 0)) {
 		// if all available threads are already running
 		// and there's work waiting, just run in current thread
 		lock.unlock();
@@ -115,9 +115,9 @@ void threadpool::submit(waiter *obj, std::function<void()> f, bool leaf)
 		--depth;
 		is_leaf = false;
 	} else {
-		if (obj)
+		if(obj)
 			obj->inc();
-		if (leaf)
+		if(leaf)
 			queue.push_front({obj, f, leaf});
 		else
 			queue.push_back({obj, f, leaf});
@@ -135,15 +135,16 @@ threadpool::waiter::~waiter()
 	try
 	{
 		boost::unique_lock<boost::mutex> lock(mt);
-		if (num)
+		if(num)
 			GULPS_ERROR("wait should have been called before waiter dtor - waiting now");
 	}
-	catch (...) { /* ignore */ }
+	catch(...) { /* ignore */ }
+
 	try
 	{
 		wait();
 	}
-	catch (const std::exception &e)
+	catch(const std::exception &e)
 	{
 		/* ignored */
 	}
@@ -175,15 +176,16 @@ void threadpool::waiter::dec()
 void threadpool::run(bool flush)
 {
 	boost::unique_lock<boost::mutex> lock(mutex);
-	while (running) {
+	while(running)
+	{
 		entry e;
 		while(queue.empty() && running)
 		{
-			if (flush)
+			if(flush)
 				return;
 			has_work.wait(lock);
 		}
-		if (!running) break;
+		if(!running) break;
 
 		active++;
 		e = std::move(queue.front());
@@ -191,12 +193,24 @@ void threadpool::run(bool flush)
 		lock.unlock();
 		++depth;
 		is_leaf = e.leaf;
-		try { e.f(); }
-		catch (const std::exception &ex) { e.wo->set_error(); try { GULPSF_ERROR("Exception in threadpool job: {}", ex.what()); } catch (...) {} }
+		try
+		{
+			e.f();
+		}
+		catch(const std::exception &ex)
+		{
+			e.wo->set_error();
+			try
+			{
+				GULPSF_ERROR("Exception in threadpool job: {}", ex.what());
+			}
+			catch (...)
+			{}
+		}
 		--depth;
 		is_leaf = false;
 
-		if (e.wo)
+		if(e.wo)
 			e.wo->dec();
 		lock.lock();
 		active--;

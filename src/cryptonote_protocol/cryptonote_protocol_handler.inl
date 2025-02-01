@@ -69,7 +69,7 @@
 
 #define GULPS_P2P_MESSAGE(...) GULPS_OUTPUTF(gulps::OUT_USER_0, gulps::LEVEL_INFO, "p2p", gulps_minor_cat::c_str(), gulps::COLOR_WHITE, __VA_ARGS__)
 
-#define BLOCK_QUEUE_NSPANS_THRESHOLD 10                     // chunks of N blocks
+#define BLOCK_QUEUE_NSPANS_THRESHOLD 10						// chunks of N blocks
 #define BLOCK_QUEUE_SIZE_THRESHOLD (100 * 1024 * 1024)		// MB
 #define BLOCK_QUEUE_FORCE_DOWNLOAD_NEAR_BLOCKS 1000
 #define REQUEST_NEXT_SCHEDULED_SPAN_THRESHOLD (5 * 1000000) // microseconds
@@ -829,7 +829,7 @@ int t_cryptonote_protocol_handler<t_core>::handle_notify_new_transactions(int co
 		if(tvc.m_should_be_relayed)
 			newtxs.push_back(std::move(arg.txs[i]));
 	}
-    arg.txs = std::move(newtxs);
+	arg.txs = std::move(newtxs);
 
 	if(arg.txs.size())
 	{
@@ -904,8 +904,8 @@ int t_cryptonote_protocol_handler<t_core>::handle_response_get_objects(int comma
 		CRITICAL_REGION_LOCAL(m_buffer_mutex);
 		m_avg_buffer.push_back(size);
 	}
-    ++m_sync_spans_downloaded;
-    m_sync_download_objects_size += size;
+	++m_sync_spans_downloaded;
+	m_sync_download_objects_size += size;
 	GULPSF_LOG_L1("{} downloaded {} bytes worth of blocks", context_str, size);
 
 	/*using namespace boost::chrono;
@@ -1568,7 +1568,7 @@ size_t t_cryptonote_protocol_handler<t_core>::skip_unneeded_hashes(cryptonote_co
 template<class t_core>
 bool t_cryptonote_protocol_handler<t_core>::request_missing_objects(cryptonote_connection_context& context, bool check_having_blocks, bool force_next_span)
 {
-// flush stale spans
+	// flush stale spans
 	std::set<boost::uuids::uuid> live_connections;
 	m_p2p->for_each_connection([&](cryptonote_connection_context& context, nodetool::peerid_type peer_id, uint32_t support_flags)->bool{
 		live_connections.insert(context.m_connection_id);

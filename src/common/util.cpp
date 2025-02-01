@@ -786,31 +786,31 @@ bool sha256sum(const std::string &filename, crypto::hash &hash)
 
 std::string get_human_readable_timespan(uint64_t seconds)
 {
-	if (seconds < 60)
+	if(seconds < 60)
 		return std::to_string(seconds) + " seconds";
 	std::stringstream ss;
 	ss << std::fixed << std::setprecision(1);
-	if (seconds < 3600)
+	if(seconds < 3600)
 	{
 		ss << seconds / 60.f;
 		return ss.str() + " minutes";
 	}
-	if (seconds < 3600 * 24)
+	if(seconds < 3600 * 24)
 	{
 		ss << seconds / 3600.f;
 		return ss.str() + " hours";
 	}
-	if (seconds < 3600 * 24 * 30.5f)
+	if(seconds < 3600 * 24 * 30.5f)
 	{
 		ss << seconds / (3600 * 24.f);
 		return ss.str() + " days";
 	}
-	if (seconds < 3600 * 24 * 365.25f)
+	if(seconds < 3600 * 24 * 365.25f)
 	{
 		ss << seconds / (3600 * 24 * 30.5f);
 		return ss.str() + " months";
 	}
-	if (seconds < 3600 * 24 * 365.25f * 100)
+	if(seconds < 3600 * 24 * 365.25f * 100)
 	{
 		ss << seconds / (3600 * 24 * 365.25f);
 		return ss.str() + " years";

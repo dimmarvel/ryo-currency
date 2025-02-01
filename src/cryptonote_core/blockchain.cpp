@@ -241,7 +241,7 @@ bool Blockchain::scan_outputkeys_for_indexes(size_t tx_version, const txin_to_ke
 			GULPSF_LOG_L1("Additional outputs needed: {}", absolute_offsets.size() - outputs.size());
 			std::vector<uint64_t> add_offsets;
 			std::vector<output_data_t> add_outputs;
-      		add_outputs.reserve(absolute_offsets.size() - outputs.size());
+			add_outputs.reserve(absolute_offsets.size() - outputs.size());
 			for(size_t i = outputs.size(); i < absolute_offsets.size(); i++)
 				add_offsets.push_back(absolute_offsets[i]);
 			try

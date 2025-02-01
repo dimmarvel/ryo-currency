@@ -176,7 +176,7 @@ class core : public i_miner_handler
       *
       * @note see Blockchain::prepare_handle_incoming_blocks
       */
-      bool prepare_handle_incoming_blocks(const std::vector<block_complete_entry> &blocks_entry);
+	bool prepare_handle_incoming_blocks(const std::vector<block_complete_entry> &blocks_entry);
 
 	/**
       * @copydoc Blockchain::cleanup_handle_incoming_blocks
@@ -507,15 +507,15 @@ class core : public i_miner_handler
       *
       * @note see Blockchain::get_total_transactions
       */
-     size_t get_blockchain_total_transactions() const;
+	size_t get_blockchain_total_transactions() const;
 
 	/**
       * @copydoc Blockchain::have_block
       *
       * @note see Blockchain::have_block
       */
-      bool have_block_unlocked(const crypto::hash& id, int *where = NULL) const;
-      bool have_block(const crypto::hash& id, int *where = NULL) const;
+	bool have_block_unlocked(const crypto::hash& id, int *where = NULL) const;
+	bool have_block(const crypto::hash& id, int *where = NULL) const;
 
 	/**
       * @copydoc Blockchain::get_short_chain_history
@@ -691,7 +691,7 @@ class core : public i_miner_handler
       *
       * @return what it says above
       */
-     uint64_t get_earliest_ideal_height_for_version(uint8_t version) const;
+	uint64_t get_earliest_ideal_height_for_version(uint8_t version) const;
 
 	/**
       * @brief gets start_time

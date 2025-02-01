@@ -274,7 +274,7 @@ bool node_server<t_payload_net_handler>::add_host_fail(const epee::net_utils::ne
 		return false;
 
 	CRITICAL_REGION_LOCAL(m_host_fails_score_lock);
-    uint64_t fails = m_host_fails_score[address.host_str()] += score;
+	uint64_t fails = m_host_fails_score[address.host_str()] += score;
 	GULPSF_LOG_L1("Host {} fail score={}", address.host_str() , fails);
 	if(fails > P2P_IP_FAILS_BEFORE_BLOCK)
 	{
@@ -1829,11 +1829,11 @@ bool node_server<t_payload_net_handler>::parse_peers_and_add_to_container(const 
 template <class t_payload_net_handler>
 bool node_server<t_payload_net_handler>::set_max_out_peers(const boost::program_options::variables_map &vm, int64_t max)
 {
-    if(max == -1)
-      max = P2P_DEFAULT_CONNECTIONS_COUNT;
-    m_config.m_net_config.max_out_connection_count = max;
-    m_payload_handler.set_max_out_peers(max);
-    return true;
+	if(max == -1)
+		max = P2P_DEFAULT_CONNECTIONS_COUNT;
+	m_config.m_net_config.max_out_connection_count = max;
+	m_payload_handler.set_max_out_peers(max);
+	return true;
 }
 
 template <class t_payload_net_handler>
